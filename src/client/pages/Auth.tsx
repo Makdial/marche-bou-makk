@@ -271,8 +271,11 @@ export function RegisterPage() {
           </Field>
         )}
 
-        {role !== 'buyer' && (
+        {role !== 'buyer' && role !== 'gp' && (
           <Badge tone="warn">{role === 'vendor' ? t('auth.vendorReview') : t('auth.conductorReview')}</Badge>
+        )}
+        {role === 'gp' && (
+          <Badge tone="warn">New international GP accounts are reviewed by an admin before going live.</Badge>
         )}
         {(localError || action.error) && <Notice tone="danger">{localError ?? action.error}</Notice>}
         <button className="btn primary block" disabled={action.busy}>
