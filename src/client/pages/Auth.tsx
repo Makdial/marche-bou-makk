@@ -8,6 +8,7 @@ import { useAction } from '../hooks';
 import { useI18n } from '../i18n';
 import { Badge, Card, Field, Notice } from '../ui';
 import type { Point, Role } from '../../shared/types';
+import { COUNTRIES } from '../../shared/countries';
 
 const DEMO_ACCOUNTS: { role: Role; email: string; password: string }[] = [
   { role: 'buyer', email: 'buyer@market.local', password: 'demo1234' },
@@ -115,6 +116,10 @@ type Draft = {
   storeCloseTime: string;
   description: string;
   vehicle: string;
+  country: string;
+  internationalPhone: string;
+  senegalPhone: string;
+  dropoffAddress: string;
 };
 
 const EMPTY_DRAFT: Draft = {
@@ -131,6 +136,10 @@ const EMPTY_DRAFT: Draft = {
   storeCloseTime: '',
   description: '',
   vehicle: 'moto',
+  country: '',
+  internationalPhone: '',
+  senegalPhone: '',
+  dropoffAddress: '',
 };
 
 export function RegisterPage() {
@@ -153,6 +162,10 @@ export function RegisterPage() {
     setLocalError(null);
     if (role === 'vendor' && !point) {
       setLocalError(t('auth.setStoreLocation'));
+      return;
+    }
+    if (role === 'gp' && !point) {
+      setLocalError('Set the Senegal drop-off location.');
       return;
     }
     const body: Record<string, unknown> = {
@@ -180,6 +193,13 @@ export function RegisterPage() {
       });
     }
     if (role === 'conductor') body.vehicle = draft.vehicle;
+    if (role === 'gp') {
+      body.country = draft.country;
+      body.internationalPhone = draft.internationalPhone;
+      body.senegalPhone = draft.senegalPhone;
+      body.dropoffAddress = draft.dropoffAddress;
+      if (point) Object.assign(body, { dropoffLat: point.lat, dropoffLng: point.lng });
+    }
     const me = await action.run(() => signUp(body));
     if (me) navigate(HOME_PATH[me.role], { replace: true });
   }
@@ -269,6 +289,33 @@ export function RegisterPage() {
               <option value="van">{t('vehicle.van')}</option>
             </select>
           </Field>
+        )}
+
+        {role === 'gp' && (
+          <>
+            <Field label="Country of residence">
+              <select value={draft.country} onChange={set('country')}>
+                <option value="">Choose…</option>
+                {COUNTRIES.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </Field>
+            <div className="grid-2">
+              <Field label="International phone">
+                <input value={draft.internationalPhone} onChange={set('internationalPhone')} placeholder="+1 555 000 0000" />
+              </Field>
+              <Field label="Senegal phone (+221)">
+                <input value={draft.senegalPhone} onChange={set('senegalPhone')} placeholder={t('auth.phonePlaceholder')} />
+              </Field>
+            </div>
+            <Field label="Senegal drop-off address">
+              <input value={draft.dropoffAddress} onChange={set('dropoffAddress')} placeholder="Dakar, Senegal" />
+            </Field>
+            <Field label="Drop-off location on map" hint="Where people in Senegal will pick up packages.">
+              <LocationInput value={point} onChange={setPoint} />
+            </Field>
+          </>
         )}
 
         {role !== 'buyer' && role !== 'gp' && (
