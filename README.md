@@ -52,6 +52,22 @@ NODE_ENV=production JWT_SECRET=<long-random-string> ADMIN_PASSWORD=<strong-passw
 
 One process serves the web app and the API on `PORT` (default 4000). Demo data is off by default in production.
 
+### Keeping it online (Windows + Cloudflare Tunnel)
+
+The live site runs on this machine: the Node server on port 4000, exposed by a Cloudflare Tunnel. A watchdog keeps both processes alive:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\install-watchdog.ps1
+```
+
+- Preferred: registers Windows scheduled tasks (at logon, plus a 5-minute keepalive).
+- If Task Scheduler is blocked, it copies `scripts\start-watchdog.vbs` into the user's Startup folder and starts the watchdog through WMI, so it survives the terminal that launched it.
+- The watchdog checks `http://localhost:4000/api/settings` every 20 seconds and restarts the API when it stops, restarts the tunnel when its process exits, and checks `https://marcheboumakk.com` every 2 minutes.
+- Logs: `logs\watchdog.log`, `logs\api.err.log`, `logs\tunnel.err.log`.
+- The JWT secret is generated once into `data\jwt-secret.txt` (gitignored), so it is stable across restarts and never committed.
+
+For a fully unattended server, run both as Windows services from an elevated shell (`cloudflared service install` and a service wrapper such as NSSM), and back up `data\market.db` regularly.
+
 ## Configuration
 
 Copy `.env.example` to `.env` (or set the variables in your host):
