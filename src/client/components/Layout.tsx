@@ -1,4 +1,5 @@
-import { Link, NavLink, Outlet, useNavigate } from 'react-router';
+import { useEffect, useState } from 'react';
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 import { useAuth } from '../auth';
 import { useCart } from '../cart';
 import { roleLabel } from '../format';
@@ -9,6 +10,30 @@ import { Preferences } from './Preferences';
 import { NotificationsMenu } from './NotificationsMenu';
 import type { TranslationKey } from '../../shared/i18n/en';
 import type { Role } from '../../shared/types';
+
+function MenuIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M4 7h16M4 12h16M4 17h16" />
+    </svg>
+  );
+}
+
+function ChatIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M20 15a2 2 0 0 1-2 2H8l-4 4V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2z" />
+    </svg>
+  );
+}
+
+function BellIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M18 8a6 6 0 1 0-12 0c0 7-3 8-3 8h18s-3-1-3-8M13.7 20a2 2 0 0 1-3.4 0" />
+    </svg>
+  );
+}
 
 interface NavLinkItem {
   to: string;
@@ -55,17 +80,77 @@ export default function Layout() {
   const { unread, chatUnread, connected, toasts, dismissToast } = useLive();
   const { count } = useCart();
   const navigate = useNavigate();
+  const location = useLocation();
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  // Close the mobile drawer whenever the route changes.
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMenuOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    document.body.classList.add('drawer-open');
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.classList.remove('drawer-open');
+    };
+  }, [menuOpen]);
 
   if (!user) return null;
   const pending = user.status !== 'active';
 
   return (
     <div className="shell">
-      <aside className="sidebar">
-        <Link to="/" className="brand">
+      <header className="mobile-bar">
+        <button
+          type="button"
+          className="icon-btn"
+          aria-label={t('common.menu')}
+          aria-expanded={menuOpen}
+          aria-controls="app-sidebar"
+          onClick={() => setMenuOpen(true)}
+        >
+          <MenuIcon />
+        </button>
+        <Link to="/" className="mobile-brand">
           <span className="logo">MB</span>
           <span>{t('app.name')}</span>
         </Link>
+        <div className="mobile-actions">
+          <Link to="/messages" className="icon-btn" aria-label={t('nav.messages')}>
+            <ChatIcon />
+            {chatUnread > 0 && <span className="count alert">{chatUnread}</span>}
+          </Link>
+          <Link to="/notifications" className="icon-btn" aria-label={t('nav.notifications')}>
+            <BellIcon />
+            {unread > 0 && <span className="count alert">{unread}</span>}
+          </Link>
+        </div>
+      </header>
+
+      <button
+        type="button"
+        className={`drawer-backdrop ${menuOpen ? 'show' : ''}`}
+        aria-label={t('common.close')}
+        tabIndex={menuOpen ? 0 : -1}
+        onClick={() => setMenuOpen(false)}
+      />
+
+      <aside id="app-sidebar" className={`sidebar ${menuOpen ? 'open' : ''}`}>
+        <div className="sidebar-head">
+          <Link to="/" className="brand">
+            <span className="logo">MB</span>
+            <span>{t('app.name')}</span>
+          </Link>
+          <button type="button" className="icon-btn sidebar-close" aria-label={t('common.close')} onClick={() => setMenuOpen(false)}>
+            ×
+          </button>
+        </div>
         <div className="role-pill">{roleLabel(user.role)}</div>
         <nav className="nav">
           {NAV[user.role].map((link) => (

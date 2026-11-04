@@ -138,6 +138,7 @@ export const woApp = {
   'nav.gpDeliveries': 'Livraisons internationales',
   'nav.gpPeople': 'Nit ñi',
   'common.close': 'Tëj',
+  'common.menu': 'Menu',
   'common.yes': 'Waaw',
   'common.no': 'Déedéet',
   'common.edit': 'Soppi',

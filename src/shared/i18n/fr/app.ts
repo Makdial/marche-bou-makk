@@ -138,6 +138,7 @@ export const frApp = {
   'nav.gpDeliveries': 'Livraisons internationales',
   'nav.gpPeople': 'Personnes',
   'common.close': 'Fermer',
+  'common.menu': 'Menu',
   'common.yes': 'Oui',
   'common.no': 'Non',
   'common.edit': 'Modifier',

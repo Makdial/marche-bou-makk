@@ -23,12 +23,14 @@ function AuthShell({ children, title, subtitle }: { children: ReactNode; title: 
   return (
     <div className="auth-page">
       <div className="auth-column">
-        <div className="auth-prefs">
-          <Preferences />
-        </div>
-        <div className="brand big">
-          <span className="logo">MB</span>
-          <span>{t('app.name')}</span>
+        <div className="auth-top">
+          <div className="brand big">
+            <span className="logo">MB</span>
+            <span>{t('app.name')}</span>
+          </div>
+          <div className="auth-prefs">
+            <Preferences />
+          </div>
         </div>
         <Card className="auth-card">
           <h1>{title}</h1>
@@ -206,7 +208,7 @@ export function RegisterPage() {
 
   return (
     <AuthShell title={t('auth.createTitle')} subtitle={t('auth.createSub')}>
-      <div className="tabs" role="tablist">
+      <div className="tabs auth-tabs" role="tablist">
         {(['buyer', 'vendor', 'conductor', 'gp'] as Role[]).map((option) => (
           <button
             key={option}

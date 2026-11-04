@@ -675,6 +675,7 @@ export const en = {
   'err.routeNotFound': 'Not found',
   'err.fileNotFound': 'File not found',
   'common.close': 'Close',
+  'common.menu': 'Menu',
   'common.yes': 'Yes',
   'common.no': 'No',
   'common.edit': 'Edit',
