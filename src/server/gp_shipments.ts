@@ -82,15 +82,17 @@ export function createShipment(gpUserId: number, input: z.infer<typeof shipmentS
   const shipment = toShipment(row!);
   notify([gpUserId], {
     type: 'gp.shipment.registered',
-    title: 'Package registered',
-    body: `${shipment.senderName} → ${shipment.receiverName} (${shipment.weightKg} kg)`,
+    titleKey: 'notif.gpRegistered.title',
+    bodyKey: 'notif.gpRegistered.body',
+    params: { sender: shipment.senderName, receiver: shipment.receiverName, weight: shipment.weightKg },
     data: { shipmentId: shipment.id },
   });
   const admins = sql.all<{ id: number }>("SELECT id FROM users WHERE role = 'admin' AND status = 'active'");
   notify(admins.map((a) => a.id), {
     type: 'gp.shipment.registered',
-    title: 'New GP package',
-    body: `${shipment.senderName} → ${shipment.receiverName} (${shipment.weightKg} kg)`,
+    titleKey: 'notif.gpNew.title',
+    bodyKey: 'notif.gpNew.body',
+    params: { sender: shipment.senderName, receiver: shipment.receiverName, weight: shipment.weightKg },
     data: { shipmentId: shipment.id, gpUserId },
   });
   return shipment;

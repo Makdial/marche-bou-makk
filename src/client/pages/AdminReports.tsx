@@ -1,10 +1,16 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { api } from '../api';
 import { useApi, useAction } from '../hooks';
 import { useI18n } from '../i18n';
 import { useSettings } from '../settings';
 import { Card, Empty, ErrorState, Loading, Notice, PageHeader } from '../ui';
-import type { AdminSubscription } from '../../shared/types';
+
+const PERIOD_KEYS = {
+  today: 'common.period.today',
+  week: 'common.period.week',
+  month: 'common.period.month',
+  all: 'common.period.all',
+} as const;
 
 // Simple admin reports: platform totals + per-store sales from orders.
 export function AdminReportsPage() {
@@ -35,8 +41,12 @@ export function AdminReportsPage() {
       api('/admin/alerts', {
         method: 'POST',
         body: {
-          title: `Sales report: ${storeName}`,
-          body: `Period: ${period}. Orders: ${storeOrders.length}. Revenue: ${money(revenue)}.`,
+          title: t('admin.reportAlertTitle', { store: storeName }),
+          body: t('admin.reportAlertBody', {
+            period: t(PERIOD_KEYS[period]),
+            orders: storeOrders.length,
+            revenue: money(revenue),
+          }),
           audience: ['vendors'],
           productId: null,
         },
@@ -49,36 +59,36 @@ export function AdminReportsPage() {
 
   return (
     <div className="page">
-      <PageHeader title="Reports" subtitle="Platform and per-store sales." actions={<button className="btn small" onClick={() => window.print()}>Print report</button>} />
+      <PageHeader title={t('admin.reportsTitle')} subtitle={t('admin.reportsSubtitle')} actions={<button className="btn small" onClick={() => window.print()}>{t('common.printReport')}</button>} />
       <div className="toolbar">
         <select value={period} onChange={(e) => setPeriod(e.target.value as any)}>
-          <option value="today">Today</option>
-          <option value="week">This week</option>
-          <option value="month">This month</option>
-          <option value="all">All time</option>
+          <option value="today">{t('common.period.today')}</option>
+          <option value="week">{t('common.period.week')}</option>
+          <option value="month">{t('common.period.month')}</option>
+          <option value="all">{t('common.period.all')}</option>
         </select>
       </div>
       {orders.loading && !orders.data && <Loading />}
       {orders.error && <ErrorState message={orders.error} />}
       <div className="stats">
-        <div className="stat"><span className="stat-label">Orders</span><strong className="stat-value">{totalOrders}</strong></div>
-        <div className="stat"><span className="stat-label">Revenue</span><strong className="stat-value">{money(totalRevenue)}</strong></div>
+        <div className="stat"><span className="stat-label">{t('admin.ordersLabel')}</span><strong className="stat-value">{totalOrders}</strong></div>
+        <div className="stat"><span className="stat-label">{t('admin.revenue')}</span><strong className="stat-value">{money(totalRevenue)}</strong></div>
       </div>
-      <Card title="Per store">
-        {filtered.length === 0 && <Empty title="No orders" />}
+      <Card title={t('admin.perStore')}>
+        {filtered.length === 0 && <Empty title={t('admin.noOrders')} />}
         <table className="table">
           <thead>
             <tr>
-              <th>Store</th>
-              <th>Orders</th>
-              <th>Revenue</th>
+              <th>{t('admin.colStore')}</th>
+              <th>{t('admin.ordersLabel')}</th>
+              <th>{t('admin.revenue')}</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
             {Array.from(new Set(filtered.map((o: any) => o.store?.id ?? o.storeId))).map((storeId) => {
               const storeOrders = filtered.filter((o: any) => (o.store?.id ?? o.storeId) === storeId);
-              const storeName = storeOrders[0]?.store?.name ?? `Store ${storeId}`;
+              const storeName = storeOrders[0]?.store?.name ?? t('admin.storeNumber', { id: Number(storeId) });
               const revenue = storeOrders.reduce((s: number, o: any) => s + (o.totalCents ?? 0), 0);
               return (
                 <tr key={storeId}>
@@ -87,7 +97,7 @@ export function AdminReportsPage() {
                   <td>{money(revenue)}</td>
                   <td>
                     <button className="btn small" disabled={action.busy} onClick={() => sendReport(storeId as number, storeName)}>
-                      Send report
+                      {t('admin.sendReport')}
                     </button>
                   </td>
                 </tr>

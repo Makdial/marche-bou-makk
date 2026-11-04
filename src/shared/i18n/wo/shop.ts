@@ -114,4 +114,12 @@ export const woShop = {
   'checkout.deliveryIncluded': 'La livraison est incluse. Les boutiques prennent en charge les frais de transport.',
   'order.deliveryIncluded': 'Inclus',
   'order.deliveryFee': 'Frais de livraison',
+  'order.printTicket': 'Móol ticket bi',
+  'order.deliveryProof': 'Preuve livraison',
+  'shop.fromCountry': 'Jóg {country}',
+  'shop.gpDropoff': 'Bérab dépôt GP international',
+  'store.openingHours': 'Waxtu ubbi',
+  'store.website': 'Site web',
+  'store.productsInStock': 'Produit yi ci stock',
+  'store.inStock': '{count} ci stock',
 };

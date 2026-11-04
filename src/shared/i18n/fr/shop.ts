@@ -114,4 +114,12 @@ export const frShop = {
   'checkout.deliveryIncluded': 'La livraison est incluse. Les boutiques prennent en charge les frais de transport.',
   'order.deliveryIncluded': 'Inclus',
   'order.deliveryFee': 'Frais de livraison',
+  'order.printTicket': 'Imprimer le ticket',
+  'order.deliveryProof': 'Preuve de livraison',
+  'shop.fromCountry': 'De {country}',
+  'shop.gpDropoff': 'Point de dépôt GP international',
+  'store.openingHours': "Heures d'ouverture",
+  'store.website': 'Site web',
+  'store.productsInStock': 'Produits en stock',
+  'store.inStock': '{count} en stock',
 };

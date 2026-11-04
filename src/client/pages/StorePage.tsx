@@ -31,26 +31,26 @@ export function StorePage() {
       <div className="store-meta">
         {current.openTime && current.closeTime && (
           <div className="store-meta-item">
-            <span className="store-meta-label">Opening hours</span>
+            <span className="store-meta-label">{t('store.openingHours')}</span>
             <strong>{current.openTime} – {current.closeTime}</strong>
           </div>
         )}
         {current.phone && (
           <div className="store-meta-item">
-            <span className="store-meta-label">Phone</span>
+            <span className="store-meta-label">{t('common.phone')}</span>
             <strong>{current.phone}</strong>
           </div>
         )}
         {current.website && (
           <div className="store-meta-item">
-            <span className="store-meta-label">Website</span>
+            <span className="store-meta-label">{t('store.website')}</span>
             <a className="store-website" href={current.website} target="_blank" rel="noreferrer">
               {current.website.replace(/^https?:\/\//, '')}
             </a>
           </div>
         )}
         <div className="store-meta-item">
-          <span className="store-meta-label">Products in stock</span>
+          <span className="store-meta-label">{t('store.productsInStock')}</span>
           <strong>{current.productCount}</strong>
         </div>
       </div>
@@ -66,7 +66,7 @@ export function StorePage() {
               {offer.description && <p className="muted small">{offer.description}</p>}
               <div className="price-row">
                 <span className="price">{money(offer.priceCents)}</span>
-                {offer.stock > 0 && <span className="stock-pill">{offer.stock} in stock</span>}
+                {offer.stock > 0 && <span className="stock-pill">{t('store.inStock', { count: offer.stock })}</span>}
               </div>
             </div>
           </Link>

@@ -91,9 +91,9 @@ export function ShopPage() {
                 <Popup>
                   <strong>{gp.name}</strong>
                   <br />
-                  {gp.country && <>From {gp.country}<br /></>}
+                  {gp.country && <>{t('shop.fromCountry', { country: gp.country })}<br /></>}
                   {gp.address && <>{gp.address}<br /></>}
-                  <span className="muted small">International GP drop-off point</span>
+                  <span className="muted small">{t('shop.gpDropoff')}</span>
                 </Popup>
               </Marker>
             ))}

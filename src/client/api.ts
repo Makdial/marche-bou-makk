@@ -60,6 +60,6 @@ export async function uploadImage(file: File): Promise<string> {
     body: file,
   });
   const data = (await response.json().catch(() => ({}))) as { url?: string; error?: string };
-  if (!response.ok || !data.url) throw new ApiError(response.status, data.error ?? 'Upload failed');
+  if (!response.ok || !data.url) throw new ApiError(response.status, data.error ?? tr('common.uploadFailed'));
   return data.url;
 }

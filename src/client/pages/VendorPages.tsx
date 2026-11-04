@@ -110,7 +110,7 @@ export function VendorOrdersPage() {
 
   return (
     <div className="page">
-      <PageHeader title={t('vendor.ordersTitle')} subtitle={t('vendor.ordersSubtitle')} actions={<button className="btn small" onClick={() => window.print()}>Print report</button>} />
+      <PageHeader title={t('vendor.ordersTitle')} subtitle={t('vendor.ordersSubtitle')} actions={<button className="btn small" onClick={() => window.print()}>{t('common.printReport')}</button>} />
       <div className="tabs">
         {SCOPE_TABS.map((tab) => (
           <button key={tab.value} className={scope === tab.value ? 'tab active' : 'tab'} onClick={() => setScope(tab.value)}>
@@ -121,10 +121,10 @@ export function VendorOrdersPage() {
       {action.error && <ErrorState message={action.error} />}
       <div className="toolbar">
         <select value={period} onChange={(e) => setPeriod(e.target.value as any)}>
-          <option value="all">All time</option>
-          <option value="today">Today</option>
-          <option value="week">This week</option>
-          <option value="month">This month</option>
+          <option value="all">{t('common.period.all')}</option>
+          <option value="today">{t('common.period.today')}</option>
+          <option value="week">{t('common.period.week')}</option>
+          <option value="month">{t('common.period.month')}</option>
         </select>
       </div>
       {orders.loading && !orders.data && <Loading />}
@@ -505,14 +505,14 @@ function StoreForm({ store, onSaved }: { store: Store; onSaved: () => void }) {
             <Field label={t('common.phone')}>
               <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
             </Field>
-            <Field label="Website">
-              <input value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="https://..." />
+            <Field label={t('vendor.website')}>
+              <input value={website} onChange={(e) => setWebsite(e.target.value)} placeholder={t('auth.websitePlaceholder')} />
             </Field>
-            <Field label="Opening time">
-              <input value={openTime} onChange={(e) => setOpenTime(e.target.value)} placeholder="08:00" />
+            <Field label={t('vendor.openingTime')}>
+              <input value={openTime} onChange={(e) => setOpenTime(e.target.value)} placeholder={t('auth.openTimePlaceholder')} />
             </Field>
-            <Field label="Closing time">
-              <input value={closeTime} onChange={(e) => setCloseTime(e.target.value)} placeholder="22:00" />
+            <Field label={t('vendor.closingTime')}>
+              <input value={closeTime} onChange={(e) => setCloseTime(e.target.value)} placeholder={t('auth.closeTimePlaceholder')} />
             </Field>
           </div>
           <Field label={t('common.address')}>
@@ -525,7 +525,7 @@ function StoreForm({ store, onSaved }: { store: Store; onSaved: () => void }) {
             <textarea rows={3} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
           </Field>
           <Field label={t('vendor.banner')} hint={t('vendor.bannerHint')}>
-            {bannerUrl && <img className="store-banner-preview" src={bannerUrl} alt="banner" />}
+            {bannerUrl && <img className="store-banner-preview" src={bannerUrl} alt={t('vendor.banner')} />}
             <div className="row-gap">
               <input type="file" accept="image/*" disabled={bannerUploading} onChange={async (e) => {
                 const file = e.target.files?.[0];

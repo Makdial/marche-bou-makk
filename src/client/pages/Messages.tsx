@@ -116,7 +116,7 @@ function ConversationList({ conversations, loading, selectedId, canSend, navigat
           <div className="muted small">{roleLabel(conv.other.role)}{conv.other.storeName ? ` · ${conv.other.storeName}` : ''}</div>
           {conv.lastMessage && (
             <>
-              <div className="chat-item-preview">{conv.lastMessage.body.slice(0, 60) || (conv.lastMessage.imageUrl ? '📷 Photo' : '')}</div>
+              <div className="chat-item-preview">{conv.lastMessage.body.slice(0, 60) || (conv.lastMessage.imageUrl ? t('chat.photoPreview') : '')}</div>
               <div className="muted small">{timeAgo(conv.lastMessage.createdAt)}</div>
             </>
           )}
@@ -211,7 +211,7 @@ function Thread({ conversationId, canSend, onLoaded, navigate }: { conversationI
       const videoEl = document.getElementById('local-video') as HTMLVideoElement | null;
       if (videoEl) { videoEl.srcObject = stream; videoEl.play(); }
     } catch (e: any) {
-      setError(e.message || 'Camera/mic access denied');
+      setError(e.message || t('chat.cameraDenied'));
       setCalling(false);
     }
   }
@@ -235,9 +235,9 @@ function Thread({ conversationId, canSend, onLoaded, navigate }: { conversationI
             </div>
             <div className="row-gap">
               {otherPhone && (
-                <a className="btn small" href={`tel:${otherPhone}`}>📞 Call</a>
+                <a className="btn small" href={`tel:${otherPhone}`}>📞 {t('chat.call')}</a>
               )}
-              <button className="btn small" disabled={!canSend} onClick={() => startCall(true)}>📹 Video</button>
+              <button className="btn small" disabled={!canSend} onClick={() => startCall(true)}>📹 {t('chat.video')}</button>
             </div>
           </>
         )}
@@ -245,10 +245,10 @@ function Thread({ conversationId, canSend, onLoaded, navigate }: { conversationI
 
       {incomingCall && (
         <Notice tone="info">
-          Incoming {incomingCall.payload?.video ? 'video' : 'voice'} call from {incomingCall.fromName}
+          {t(incomingCall.payload?.video ? 'chat.incomingVideo' : 'chat.incomingVoice', { name: incomingCall.fromName })}
           <div className="row-gap" style={{ marginTop: 8 }}>
-            <button className="btn small primary" onClick={() => { setIncomingCall(null); startCall(incomingCall.payload?.video); }}>Accept</button>
-            <button className="btn small" onClick={() => { setIncomingCall(null); api(`/messages/conversations/${conversationId}/call`, { method: 'POST', body: { type: 'hangup' } }).catch(() => undefined); }}>Decline</button>
+            <button className="btn small primary" onClick={() => { setIncomingCall(null); startCall(incomingCall.payload?.video); }}>{t('chat.accept')}</button>
+            <button className="btn small" onClick={() => { setIncomingCall(null); api(`/messages/conversations/${conversationId}/call`, { method: 'POST', body: { type: 'hangup' } }).catch(() => undefined); }}>{t('chat.decline')}</button>
           </div>
         </Notice>
       )}
@@ -257,7 +257,7 @@ function Thread({ conversationId, canSend, onLoaded, navigate }: { conversationI
         <div className="card">
           <video id="local-video" autoPlay muted playsInline style={{ width: '100%', maxHeight: 240, borderRadius: 8 }} />
           <div className="row-gap" style={{ marginTop: 8 }}>
-            <button className="btn small danger" onClick={() => { setCalling(false); const v = document.getElementById('local-video') as HTMLVideoElement; if (v?.srcObject) (v.srcObject as MediaStream).getTracks().forEach((tr) => tr.stop()); }}>Hang up</button>
+            <button className="btn small danger" onClick={() => { setCalling(false); const v = document.getElementById('local-video') as HTMLVideoElement; if (v?.srcObject) (v.srcObject as MediaStream).getTracks().forEach((tr) => tr.stop()); }}>{t('chat.hangUp')}</button>
           </div>
         </div>
       )}
@@ -272,7 +272,7 @@ function Thread({ conversationId, canSend, onLoaded, navigate }: { conversationI
               {msg.imageUrl && (/\.(mp4|webm|mov)$/i.test(msg.imageUrl) ? (
                 <video src={msg.imageUrl} controls style={{ maxWidth: '100%', borderRadius: 8, marginBottom: 4 }} />
               ) : (
-                <img src={msg.imageUrl} alt="attachment" style={{ maxWidth: '100%', borderRadius: 8, marginBottom: 4 }} />
+                <img src={msg.imageUrl} alt={t('chat.attachment')} style={{ maxWidth: '100%', borderRadius: 8, marginBottom: 4 }} />
               ))}
               {msg.body && <div style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{msg.body}</div>}
               <div className="chat-bubble-meta">{formatDateTime(msg.createdAt)}</div>
@@ -290,7 +290,7 @@ function Thread({ conversationId, canSend, onLoaded, navigate }: { conversationI
               {/\.(mp4|webm|mov)$/i.test(image) ? (
                 <video src={image} style={{ maxHeight: 80, borderRadius: 6 }} />
               ) : (
-                <img src={image} alt="attachment" style={{ maxHeight: 80, borderRadius: 6 }} />
+                <img src={image} alt={t('chat.attachment')} style={{ maxHeight: 80, borderRadius: 6 }} />
               )}
               <button type="button" className="btn small" onClick={() => setImage(null)}>✕</button>
             </div>

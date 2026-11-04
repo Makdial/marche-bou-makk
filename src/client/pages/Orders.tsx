@@ -113,7 +113,7 @@ export function OrderPage() {
           <>
             <StatusBadge status={current.status} />
             <button className="btn small" onClick={() => window.print()}>
-              Print ticket
+              {t('order.printTicket')}
             </button>
           </>
         }
@@ -252,8 +252,8 @@ export function OrderPage() {
       </div>
 
       {current.deliveryPhotoUrl && (
-        <Card title="Delivery proof">
-          <img src={current.deliveryPhotoUrl} alt="Delivery proof" style={{ maxWidth: '100%', borderRadius: 8 }} />
+        <Card title={t('order.deliveryProof')}>
+          <img src={current.deliveryPhotoUrl} alt={t('order.deliveryProof')} style={{ maxWidth: '100%', borderRadius: 8 }} />
         </Card>
       )}
 

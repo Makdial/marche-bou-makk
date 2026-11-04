@@ -31,6 +31,12 @@ import type {
   UserStatus,
 } from '../../shared/types';
 
+const USER_STATUS_KEY: Record<UserStatus, TranslationKey> = {
+  active: 'admin.statusActive',
+  pending: 'admin.statusPending',
+  suspended: 'admin.statusSuspended',
+};
+
 export function AdminOverviewPage() {
   const { money } = useSettings();
   const { t } = useI18n();
@@ -145,7 +151,7 @@ export function AdminPeoplePage() {
           <option value="vendor">{t('admin.roleStores')}</option>
           <option value="conductor">{t('admin.roleConductors')}</option>
           <option value="buyer">{t('admin.roleShoppers')}</option>
-          <option value="gp">International GP</option>
+          <option value="gp">{t('role.gp')}</option>
         </select>
         <select value={status} onChange={(event) => setStatus(event.target.value)}>
           <option value="">{t('admin.anyStatus')}</option>
@@ -208,22 +214,22 @@ export function AdminPeoplePage() {
         </Card>
       )}
       {selected && (
-        <Card title="Person details">
+        <Card title={t('admin.personDetails')}>
           <div className="store-meta">
-            <div className="store-meta-item"><span className="store-meta-label">Name</span><strong>{selected.name}</strong></div>
-            <div className="store-meta-item"><span className="store-meta-label">Email</span><strong>{selected.email}</strong></div>
-            <div className="store-meta-item"><span className="store-meta-label">Role</span><strong>{roleLabel(selected.role)}</strong></div>
-            <div className="store-meta-item"><span className="store-meta-label">Status</span><strong>{selected.status}</strong></div>
-            {selected.phone && <div className="store-meta-item"><span className="store-meta-label">Phone</span><strong>{selected.phone}</strong></div>}
-            {selected.storeName && <div className="store-meta-item"><span className="store-meta-label">Store</span><strong>{selected.storeName}</strong></div>}
-            {selected.vehicle && <div className="store-meta-item"><span className="store-meta-label">Vehicle</span><strong>{vehicleLabel(selected.vehicle)}</strong></div>}
-            {selected.isOnline !== null && <div className="store-meta-item"><span className="store-meta-label">Online</span><strong>{selected.isOnline ? 'Yes' : 'No'}</strong></div>}
-            {selected.gpCountry && <div className="store-meta-item"><span className="store-meta-label">Country (GP)</span><strong>{selected.gpCountry}</strong></div>}
-            {selected.gpInternationalPhone && <div className="store-meta-item"><span className="store-meta-label">Intl phone</span><strong>{selected.gpInternationalPhone}</strong></div>}
-            {selected.gpSenegalPhone && <div className="store-meta-item"><span className="store-meta-label">Senegal phone</span><strong>{selected.gpSenegalPhone}</strong></div>}
-            {selected.gpDropoff && <div className="store-meta-item"><span className="store-meta-label">Drop-off (Senegal)</span><strong>{selected.gpDropoff}</strong></div>}
+            <div className="store-meta-item"><span className="store-meta-label">{t('common.name')}</span><strong>{selected.name}</strong></div>
+            <div className="store-meta-item"><span className="store-meta-label">{t('common.email')}</span><strong>{selected.email}</strong></div>
+            <div className="store-meta-item"><span className="store-meta-label">{t('admin.colRole')}</span><strong>{roleLabel(selected.role)}</strong></div>
+            <div className="store-meta-item"><span className="store-meta-label">{t('common.status')}</span><strong>{t(USER_STATUS_KEY[selected.status])}</strong></div>
+            {selected.phone && <div className="store-meta-item"><span className="store-meta-label">{t('common.phone')}</span><strong>{selected.phone}</strong></div>}
+            {selected.storeName && <div className="store-meta-item"><span className="store-meta-label">{t('common.store')}</span><strong>{selected.storeName}</strong></div>}
+            {selected.vehicle && <div className="store-meta-item"><span className="store-meta-label">{t('auth.vehicle')}</span><strong>{vehicleLabel(selected.vehicle)}</strong></div>}
+            {selected.isOnline !== null && <div className="store-meta-item"><span className="store-meta-label">{t('conductor.online')}</span><strong>{selected.isOnline ? t('common.yes') : t('common.no')}</strong></div>}
+            {selected.gpCountry && <div className="store-meta-item"><span className="store-meta-label">{t('admin.countryGp')}</span><strong>{selected.gpCountry}</strong></div>}
+            {selected.gpInternationalPhone && <div className="store-meta-item"><span className="store-meta-label">{t('admin.intlPhone')}</span><strong>{selected.gpInternationalPhone}</strong></div>}
+            {selected.gpSenegalPhone && <div className="store-meta-item"><span className="store-meta-label">{t('admin.senegalPhone')}</span><strong>{selected.gpSenegalPhone}</strong></div>}
+            {selected.gpDropoff && <div className="store-meta-item"><span className="store-meta-label">{t('admin.dropoffSenegal')}</span><strong>{selected.gpDropoff}</strong></div>}
           </div>
-          <button className="btn small" onClick={() => setSelected(null)}>Close</button>
+          <button className="btn small" onClick={() => setSelected(null)}>{t('common.close')}</button>
         </Card>
       )}
     </div>
@@ -572,15 +578,15 @@ function CategoriesManager() {
   }
 
   async function remove(id: number) {
-    if (!window.confirm('Delete this category?')) return;
+    if (!window.confirm(t('admin.deleteCategoryConfirm'))) return;
     const result = await action.run(() => api(`/admin/categories/${id}`, { method: 'DELETE' }));
     if (result !== undefined) cats.reload();
   }
 
   return (
-    <Card title="Categories">
+    <Card title={t('admin.categories')}>
       <div className="row-gap">
-        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="New category name" />
+        <input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('admin.newCategory')} />
         <button className="btn primary" disabled={action.busy} onClick={add}>
           {action.busy ? t('common.saving') : t('common.save')}
         </button>

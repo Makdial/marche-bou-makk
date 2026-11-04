@@ -165,7 +165,7 @@ export function RegisterPage() {
       return;
     }
     if (role === 'gp' && !point) {
-      setLocalError('Set the Senegal drop-off location.');
+      setLocalError(t('auth.setDropoffLocation'));
       return;
     }
     const body: Record<string, unknown> = {
@@ -258,14 +258,14 @@ export function RegisterPage() {
               <Field label={t('auth.storePhone')}>
                 <input value={draft.storePhone} onChange={set('storePhone')} placeholder={t('auth.phonePlaceholder')} />
               </Field>
-              <Field label="Website">
-                <input value={draft.storeWebsite} onChange={set('storeWebsite')} placeholder="https://..." />
+              <Field label={t('auth.website')}>
+                <input value={draft.storeWebsite} onChange={set('storeWebsite')} placeholder={t('auth.websitePlaceholder')} />
               </Field>
-              <Field label="Opening time">
-                <input value={draft.storeOpenTime} onChange={set('storeOpenTime')} placeholder="08:00" />
+              <Field label={t('auth.openingTime')}>
+                <input value={draft.storeOpenTime} onChange={set('storeOpenTime')} placeholder={t('auth.openTimePlaceholder')} />
               </Field>
-              <Field label="Closing time">
-                <input value={draft.storeCloseTime} onChange={set('storeCloseTime')} placeholder="22:00" />
+              <Field label={t('auth.closingTime')}>
+                <input value={draft.storeCloseTime} onChange={set('storeCloseTime')} placeholder={t('auth.closeTimePlaceholder')} />
               </Field>
             </div>
             <Field label={t('auth.storeAddress')}>
@@ -293,26 +293,26 @@ export function RegisterPage() {
 
         {role === 'gp' && (
           <>
-            <Field label="Country of residence">
+            <Field label={t('auth.countryResidence')}>
               <select value={draft.country} onChange={set('country')}>
-                <option value="">Choose…</option>
+                <option value="">{t('auth.choose')}</option>
                 {COUNTRIES.map((c) => (
                   <option key={c} value={c}>{c}</option>
                 ))}
               </select>
             </Field>
             <div className="grid-2">
-              <Field label="International phone">
-                <input value={draft.internationalPhone} onChange={set('internationalPhone')} placeholder="+1 555 000 0000" />
+              <Field label={t('auth.internationalPhone')}>
+                <input value={draft.internationalPhone} onChange={set('internationalPhone')} placeholder={t('auth.internationalPhonePlaceholder')} />
               </Field>
-              <Field label="Senegal phone (+221)">
+              <Field label={t('auth.senegalPhone')}>
                 <input value={draft.senegalPhone} onChange={set('senegalPhone')} placeholder={t('auth.phonePlaceholder')} />
               </Field>
             </div>
-            <Field label="Senegal drop-off address">
-              <input value={draft.dropoffAddress} onChange={set('dropoffAddress')} placeholder="Dakar, Senegal" />
+            <Field label={t('auth.senegalDropoff')}>
+              <input value={draft.dropoffAddress} onChange={set('dropoffAddress')} placeholder={t('auth.dropoffPlaceholder')} />
             </Field>
-            <Field label="Drop-off location on map" hint="Where people in Senegal will pick up packages.">
+            <Field label={t('auth.dropoffLocation')} hint={t('auth.dropoffLocationHint')}>
               <LocationInput value={point} onChange={setPoint} />
             </Field>
           </>
@@ -322,7 +322,7 @@ export function RegisterPage() {
           <Badge tone="warn">{role === 'vendor' ? t('auth.vendorReview') : t('auth.conductorReview')}</Badge>
         )}
         {role === 'gp' && (
-          <Badge tone="warn">New international GP accounts are reviewed by an admin before going live.</Badge>
+          <Badge tone="warn">{t('auth.gpReview')}</Badge>
         )}
         {(localError || action.error) && <Notice tone="danger">{localError ?? action.error}</Notice>}
         <button className="btn primary block" disabled={action.busy}>

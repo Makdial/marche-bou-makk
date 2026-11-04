@@ -127,7 +127,7 @@ export function ConductorHomePage() {
               <div className="stack">
                 <div className="row-gap">
                   <input
-                    placeholder="Your address"
+                    placeholder={t('conductor.yourAddress')}
                     value={address}
                     onChange={(e) => setAddress(e.target.value)}
                   />
@@ -150,7 +150,7 @@ export function ConductorHomePage() {
                       }
                     }}
                   >
-                    Find on map
+                    {t('conductor.findOnMap')}
                   </button>
                 </div>
                 <LocationInput
@@ -274,14 +274,14 @@ function ActiveDelivery({ order, onChanged }: { order: OrderView; onChanged: () 
           <>
             {!order.arrivedPickupAt && (
               <>
-                {!nearPickup && <span className="muted small">Move to the store to mark arrived.</span>}
+                {!nearPickup && <span className="muted small">{t('conductor.moveToStoreArrive')}</span>}
                 <button className="btn" disabled={action.busy || !nearPickup} onClick={() => step(`/conductor/orders/${order.id}/arrive-pickup`)}>
-                  Arrive at store
+                  {t('conductor.arriveStore')}
                 </button>
               </>
             )}
-            {order.arrivedPickupAt && <span className="muted small">Arrived at store.</span>}
-            {!nearPickup && !order.arrivedPickupAt && <span className="muted small">Move to the store to confirm pickup.</span>}
+            {order.arrivedPickupAt && <span className="muted small">{t('conductor.arrivedStore')}</span>}
+            {!nearPickup && !order.arrivedPickupAt && <span className="muted small">{t('conductor.moveToStorePickup')}</span>}
             <button className="btn primary" disabled={action.busy || !nearPickup} onClick={() => step(`/conductor/orders/${order.id}/pickup`)}>
               {t('conductor.confirmPickup')}
             </button>
@@ -291,18 +291,18 @@ function ActiveDelivery({ order, onChanged }: { order: OrderView; onChanged: () 
           <>
             {!order.arrivedDropoffAt && (
               <>
-                {!nearDropoff && <span className="muted small">Move to the drop-off to mark arrived.</span>}
+                {!nearDropoff && <span className="muted small">{t('conductor.moveToDropoffArrive')}</span>}
                 <button className="btn" disabled={action.busy || !nearDropoff} onClick={() => step(`/conductor/orders/${order.id}/arrive-dropoff`)}>
-                  Arrive at drop-off
+                  {t('conductor.arriveDropoff')}
                 </button>
               </>
             )}
-            {order.arrivedDropoffAt && <span className="muted small">Arrived at drop-off.</span>}
+            {order.arrivedDropoffAt && <span className="muted small">{t('conductor.arrivedDropoff')}</span>}
             <div className="row-gap">
               <input type="file" accept="image/*" disabled={uploading} onChange={(e) => { const f = e.target.files?.[0]; if (f) onPhoto(f); e.target.value = ''; }} />
-              {photoUrl && <img src={photoUrl} alt="proof" style={{ height: 48, borderRadius: 6 }} />}
+              {photoUrl && <img src={photoUrl} alt={t('conductor.proof')} style={{ height: 48, borderRadius: 6 }} />}
             </div>
-            {!nearDropoff && <span className="muted small">Move to the drop-off to confirm delivery.</span>}
+            {!nearDropoff && <span className="muted small">{t('conductor.moveToDropoffDeliver')}</span>}
             <button className="btn primary" disabled={action.busy || !nearDropoff || !photoUrl || uploading} onClick={() => step(`/conductor/orders/${order.id}/deliver`, { photoUrl })}>
               {t('conductor.confirmDelivered')}
             </button>
@@ -362,13 +362,13 @@ export function ConductorEarningsPage() {
 
   return (
     <div className="page">
-      <PageHeader title={t('conductor.earningsTitle')} subtitle={t('conductor.earningsSubtitle')} actions={<button className="btn small" onClick={() => window.print()}>Print report</button>} />
+      <PageHeader title={t('conductor.earningsTitle')} subtitle={t('conductor.earningsSubtitle')} actions={<button className="btn small" onClick={() => window.print()}>{t('common.printReport')}</button>} />
       <div className="toolbar">
         <select value={period} onChange={(e) => setPeriod(e.target.value as any)}>
-          <option value="all">All time</option>
-          <option value="today">Today</option>
-          <option value="week">This week</option>
-          <option value="month">This month</option>
+          <option value="all">{t('common.period.all')}</option>
+          <option value="today">{t('common.period.today')}</option>
+          <option value="week">{t('common.period.week')}</option>
+          <option value="month">{t('common.period.month')}</option>
         </select>
       </div>
       {overview.data && (

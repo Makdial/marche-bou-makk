@@ -31,9 +31,9 @@ export function AdminSubscriptionsPage() {
       {action.error && <Notice tone="danger">{action.error}</Notice>}
       <div className="row-gap">
         <select value={planChoice} onChange={(e) => setPlanChoice(e.target.value as any)}>
-          <option value="starter">Starter</option>
-          <option value="growth">Growth</option>
-          <option value="pro">Pro</option>
+          <option value="starter">{t('plan.name.starter')}</option>
+          <option value="growth">{t('plan.name.growth')}</option>
+          <option value="pro">{t('plan.name.pro')}</option>
         </select>
         <input type="number" min={1} max={12} value={months} onChange={(e) => setMonths(Number(e.target.value))} />
       </div>
@@ -58,7 +58,7 @@ export function AdminSubscriptionsPage() {
               {list.data.map((sub) => (
                 <tr key={sub.storeId}>
                   <td>{sub.storeName}<br /><span className="muted small">{sub.ownerName}</span></td>
-                  <td>{sub.plan}</td>
+                  <td>{t(`plan.name.${sub.plan}` as any)}</td>
                   <td>{sub.selling ? t('plan.sellingBadge') : t('plan.pausedBadge')}</td>
                   <td>{sub.sellsUntil ? new Date(sub.sellsUntil).toLocaleDateString() : '—'}</td>
                   <td>{sub.productLimit === null ? `${sub.productCount}` : `${sub.productCount}/${sub.productLimit}`}</td>

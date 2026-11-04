@@ -8,7 +8,13 @@ import { LocationInput } from '../components/LocationInput';
 import { Card, Empty, ErrorState, Loading, Notice, PageHeader } from '../ui';
 import type { GpProfile, GpShipment, Point } from '../../shared/types';
 import { COUNTRIES } from '../../shared/countries';
+import type { TranslationKey } from '../../shared/i18n/en';
 
+const GP_STATUS_KEY: Record<string, TranslationKey> = {
+  registered: 'gp.status.registered',
+  picked_up: 'gp.status.picked_up',
+  delivered: 'gp.status.delivered',
+};
 
 export function GpPeoplePage() {
   const { t } = useI18n();
@@ -16,20 +22,20 @@ export function GpPeoplePage() {
   const list = useApi(() => api<{ shipments: GpShipment[] }>('/gp/shipments').then((d) => d.shipments));
   return (
     <div className="page">
-      <PageHeader title="People" subtitle="Everyone registered for international transport." />
+      <PageHeader title={t('gp.peopleTitle')} subtitle={t('gp.peopleSubtitle')} />
       {list.loading && !list.data && <Loading />}
       {list.error && <ErrorState message={list.error} />}
-      {list.data && list.data.length === 0 && <Empty title="No people yet" />}
+      {list.data && list.data.length === 0 && <Empty title={t('gp.noPeople')} />}
       {list.data && list.data.length > 0 && (
         <div className="grid-cards">
           {list.data.map((sh) => (
             <Card key={sh.id} title={sh.senderName}>
               {sh.photoUrl && <img src={sh.photoUrl} alt={sh.senderName} style={{ width: '100%', height: 120, objectFit: 'cover', borderRadius: 8, marginBottom: 8 }} />}
-              <div className="muted small">Sender: {sh.senderName} · {sh.senderPhone}</div>
-              <div className="muted small">Receiver: {sh.receiverName} · {sh.receiverPhone}</div>
-              <div className="muted small">Weight: {sh.weightKg} kg · Price: {money(sh.priceCents)}</div>
-              <div className="muted small">Status: {sh.status}</div>
-              <a className="link" href={`/gp?edit=${sh.id}`}>Edit</a>
+              <div className="muted small">{t('gp.sender')}: {sh.senderName} · {sh.senderPhone}</div>
+              <div className="muted small">{t('gp.receiver')}: {sh.receiverName} · {sh.receiverPhone}</div>
+              <div className="muted small">{t('gp.weight')}: {sh.weightKg} kg · {t('gp.price')}: {money(sh.priceCents)}</div>
+              <div className="muted small">{t('gp.status')}: {t(GP_STATUS_KEY[sh.status] ?? 'gp.status.registered')}</div>
+              <a className="link" href={`/gp?edit=${sh.id}`}>{t('common.edit')}</a>
             </Card>
           ))}
         </div>
@@ -99,51 +105,51 @@ export function GpDashboardPage() {
 
   return (
     <div className="page">
-      <PageHeader title="International GP" subtitle="Your country, phone numbers and Senegal drop-off location." />
+      <PageHeader title={t('gp.title')} subtitle={t('gp.subtitle')} />
       <Notice tone="info">
-        Welcome, {user?.name}. International GP accounts are reviewed by an admin before going live.
+        {t('gp.welcome', { name: user?.name ?? '' })}
       </Notice>
-      <Card title="Your profile">
+      <Card title={t('gp.profileTitle')}>
         <div className="stack">
           <label className="field">
-            <span>Country of residence</span>
+            <span>{t('gp.countryResidence')}</span>
             <select value={form.country} onChange={(e) => setForm({ ...form, country: e.target.value })}>
-              <option value="">Choose…</option>
+              <option value="">{t('gp.choose')}</option>
               {COUNTRIES.map((c) => (
                 <option key={c} value={c}>{c}</option>
               ))}
             </select>
           </label>
           <label className="field">
-            <span>International phone number</span>
-            <input value={form.internationalPhone} onChange={(e) => setForm({ ...form, internationalPhone: e.target.value })} placeholder="+1 555 000 0000" />
+            <span>{t('gp.internationalPhone')}</span>
+            <input value={form.internationalPhone} onChange={(e) => setForm({ ...form, internationalPhone: e.target.value })} placeholder={t('auth.internationalPhonePlaceholder')} />
           </label>
           <label className="field">
-            <span>Senegal phone number (+221)</span>
-            <input value={form.senegalPhone} onChange={(e) => setForm({ ...form, senegalPhone: e.target.value })} placeholder="+221 77 000 00 00" />
+            <span>{t('gp.senegalPhone')}</span>
+            <input value={form.senegalPhone} onChange={(e) => setForm({ ...form, senegalPhone: e.target.value })} placeholder={t('auth.phonePlaceholder')} />
           </label>
           <label className="field">
-            <span>Senegal drop-off address (where people pick up)</span>
-            <input value={form.dropoffAddress} onChange={(e) => setForm({ ...form, dropoffAddress: e.target.value })} placeholder="Dakar, Senegal" />
+            <span>{t('gp.dropoffAddress')}</span>
+            <input value={form.dropoffAddress} onChange={(e) => setForm({ ...form, dropoffAddress: e.target.value })} placeholder={t('gp.dropoffPlaceholder')} />
           </label>
           <label className="field">
-            <span>Drop-off location on map</span>
+            <span>{t('gp.dropoffLocation')}</span>
             <LocationInput value={point} onChange={setPoint} />
           </label>
           {action.error && <Notice tone="danger">{action.error}</Notice>}
-          {saved && <Notice tone="success">Profile saved.</Notice>}
+          {saved && <Notice tone="success">{t('gp.profileSaved')}</Notice>}
           <div>
             <button className="btn primary" disabled={action.busy || !point} onClick={save}>
-              {action.busy ? 'Saving…' : 'Save profile'}
+              {action.busy ? t('common.saving') : t('gp.saveProfile')}
             </button>
           </div>
         </div>
       </Card>
-      <Card title="How it works">
+      <Card title={t('gp.howTitle')}>
         <ol className="steps-list">
-          <li>Choose your country of residence and enter both your international and Senegal phone numbers.</li>
-          <li>Set the Senegal address and map location where people will come to pick up packages sent from your country.</li>
-          <li>Once approved, people in Senegal can reach you through the app to collect their packages.</li>
+          <li>{t('gp.howStep1')}</li>
+          <li>{t('gp.howStep2')}</li>
+          <li>{t('gp.howStep3')}</li>
         </ol>
       </Card>
       <GpShipments initialEditId={editId} />
@@ -152,6 +158,7 @@ export function GpDashboardPage() {
 }
 
 function GpShipments({ initialEditId }: { initialEditId: number | null }) {
+  const { t } = useI18n();
   const { money } = useSettings();
   const action = useAction();
   const list = useApi(() => api<{ shipments: GpShipment[] }>('/gp/shipments').then((d) => d.shipments));
@@ -231,26 +238,26 @@ function GpShipments({ initialEditId }: { initialEditId: number | null }) {
   }
 
   async function remove(id: number) {
-    if (!window.confirm('Remove this shipment?')) return;
+    if (!window.confirm(t('gp.removeConfirm'))) return;
     const result = await action.run(() => api(`/gp/shipments/${id}`, { method: 'DELETE' }));
     if (result !== undefined) list.reload();
   }
 
   return (
     <div className="page">
-      <h3 className="section-title">Registered packages</h3>
-      <Card title={editingId ? 'Edit package' : 'Add a package'}>
+      <h3 className="section-title">{t('gp.registeredPackages')}</h3>
+      <Card title={editingId ? t('gp.editPackage') : t('gp.addPackage')}>
         <div className="stack">
           <div className="grid-2">
-            <label className="field"><span>Sender name</span><input value={form.senderName} onChange={(e) => setForm({ ...form, senderName: e.target.value })} /></label>
-            <label className="field"><span>Sender phone</span><input value={form.senderPhone} onChange={(e) => setForm({ ...form, senderPhone: e.target.value })} /></label>
-            <label className="field"><span>Receiver name (Senegal)</span><input value={form.receiverName} onChange={(e) => setForm({ ...form, receiverName: e.target.value })} /></label>
-            <label className="field"><span>Receiver phone (Senegal)</span><input value={form.receiverPhone} onChange={(e) => setForm({ ...form, receiverPhone: e.target.value })} /></label>
-            <label className="field"><span>Weight (kg)</span><input type="number" step="0.1" value={form.weightKg} onChange={(e) => setForm({ ...form, weightKg: e.target.value })} /></label>
-            <label className="field"><span>Price (FCFA)</span><input type="number" value={form.priceCents} onChange={(e) => setForm({ ...form, priceCents: e.target.value })} /></label>
+            <label className="field"><span>{t('gp.senderName')}</span><input value={form.senderName} onChange={(e) => setForm({ ...form, senderName: e.target.value })} /></label>
+            <label className="field"><span>{t('gp.senderPhone')}</span><input value={form.senderPhone} onChange={(e) => setForm({ ...form, senderPhone: e.target.value })} /></label>
+            <label className="field"><span>{t('gp.receiverName')}</span><input value={form.receiverName} onChange={(e) => setForm({ ...form, receiverName: e.target.value })} /></label>
+            <label className="field"><span>{t('gp.receiverPhone')}</span><input value={form.receiverPhone} onChange={(e) => setForm({ ...form, receiverPhone: e.target.value })} /></label>
+            <label className="field"><span>{t('gp.weightKg')}</span><input type="number" step="0.1" value={form.weightKg} onChange={(e) => setForm({ ...form, weightKg: e.target.value })} /></label>
+            <label className="field"><span>{t('gp.priceFcfa')}</span><input type="number" value={form.priceCents} onChange={(e) => setForm({ ...form, priceCents: e.target.value })} /></label>
           </div>
           <label className="field">
-            <span>Photo of package</span>
+            <span>{t('gp.packagePhoto')}</span>
             <input type="file" accept="image/*" onChange={async (e) => {
               const f = e.target.files?.[0];
               if (!f) return;
@@ -258,59 +265,59 @@ function GpShipments({ initialEditId }: { initialEditId: number | null }) {
               try { setPhoto(await uploadImage(f)); } catch { /* ignore */ }
               finally { setUploading(false); }
             }} />
-            {photo && <img src={photo} alt="package" style={{ maxHeight: 80, borderRadius: 6, marginTop: 6 }} />}
+            {photo && <img src={photo} alt={t('gp.packageAlt')} style={{ maxHeight: 80, borderRadius: 6, marginTop: 6 }} />}
           </label>
           {action.error && <Notice tone="danger">{action.error}</Notice>}
           <div className="row-gap">
             <button className="btn primary" disabled={action.busy || uploading} onClick={create}>
-              {editingId ? 'Save changes' : 'Register package'}
+              {editingId ? t('gp.saveChanges') : t('gp.registerPackage')}
             </button>
             {editingId && (
               <button className="btn" type="button" onClick={() => { setEditingId(null); setForm({ senderName: '', senderPhone: '', receiverName: '', receiverPhone: '', weightKg: '', priceCents: '' }); setPhoto(null); }}>
-                Cancel
+                {t('common.cancel')}
               </button>
             )}
           </div>
         </div>
       </Card>
 
-      <Card title="Packages">
+      <Card title={t('gp.packages')}>
         {list.loading && !list.data && <Loading />}
         {list.error && <ErrorState message={list.error} />}
-        {list.data && list.data.length === 0 && <Empty title="No packages yet" />}
+        {list.data && list.data.length === 0 && <Empty title={t('gp.noPackages')} />}
         {list.data && list.data.length > 0 && (
           <>
             <table className="table">
               <thead>
                 <tr>
-                  <th>Photo</th>
-                  <th>Sender</th>
-                  <th>Receiver (Senegal)</th>
-                  <th>Weight</th>
-                  <th>Price</th>
-                  <th>Status</th>
+                  <th>{t('gp.photo')}</th>
+                  <th>{t('gp.sender')}</th>
+                  <th>{t('gp.receiverName')}</th>
+                  <th>{t('gp.weight')}</th>
+                  <th>{t('gp.price')}</th>
+                  <th>{t('gp.status')}</th>
                   <th></th>
                 </tr>
               </thead>
               <tbody>
                 {list.data.map((sh) => (
                   <tr key={sh.id} style={{ cursor: 'pointer' }} onClick={() => editShipment(sh)}>
-                    <td>{sh.photoUrl ? <img src={sh.photoUrl} alt="package" style={{ height: 40, borderRadius: 4 }} /> : '—'}</td>
+                    <td>{sh.photoUrl ? <img src={sh.photoUrl} alt={t('gp.packageAlt')} style={{ height: 40, borderRadius: 4 }} /> : '—'}</td>
                     <td>{sh.senderName}<br /><span className="muted small">{sh.senderPhone}</span></td>
                     <td>{sh.receiverName}<br /><span className="muted small">{sh.receiverPhone}</span></td>
                     <td>{sh.weightKg} kg</td>
                     <td>{money(sh.priceCents)}</td>
-                    <td>{sh.status}{sh.proofPhotoUrl ? <><br /><img src={sh.proofPhotoUrl} alt="proof" style={{ height: 32, borderRadius: 4 }} /></> : null}</td>
+                    <td>{t(GP_STATUS_KEY[sh.status] ?? 'gp.status.registered')}{sh.proofPhotoUrl ? <><br /><img src={sh.proofPhotoUrl} alt={t('gp.proofAlt')} style={{ height: 32, borderRadius: 4 }} /></> : null}</td>
                     <td onClick={(e) => e.stopPropagation()}>
-                      {sh.status === 'registered' && <button className="btn small" disabled={action.busy} onClick={() => mark(sh.id, 'picked_up')}>Mark picked up</button>}
-                      {sh.status === 'picked_up' && <button className="btn small primary" disabled={action.busy || uploading} onClick={() => mark(sh.id, 'delivered')}>Mark delivered (photo)</button>}
-                      <button className="btn small danger" disabled={action.busy} onClick={() => remove(sh.id)}>Remove</button>
+                      {sh.status === 'registered' && <button className="btn small" disabled={action.busy} onClick={() => mark(sh.id, 'picked_up')}>{t('gp.markPickedUp')}</button>}
+                      {sh.status === 'picked_up' && <button className="btn small primary" disabled={action.busy || uploading} onClick={() => mark(sh.id, 'delivered')}>{t('gp.markDelivered')}</button>}
+                      <button className="btn small danger" disabled={action.busy} onClick={() => remove(sh.id)}>{t('common.remove')}</button>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
-            <p className="muted small">Click a row to edit that package.</p>
+            <p className="muted small">{t('gp.clickRow')}</p>
           </>
         )}
       </Card>

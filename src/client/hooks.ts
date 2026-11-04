@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useLive } from './live';
+import { tr } from './i18n';
 
 interface ApiState<T> {
   data: T | null;
@@ -43,7 +44,7 @@ export function useAction() {
     try {
       return await work();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Something went wrong');
+      setError(cause instanceof Error ? cause.message : tr('common.genericError'));
       return undefined;
     } finally {
       setBusy(false);

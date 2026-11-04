@@ -45,7 +45,7 @@ export function NotificationsMenu({ unread }: { unread: number }) {
               </button>
             )}
           </div>
-          {list.loading && !list.data && <p className="muted small">Loading…</p>}
+          {list.loading && !list.data && <p className="muted small">{t('common.loading')}</p>}
           {list.data && list.data.notifications.length === 0 && (
             <p className="muted small">{t('notifications.empty')}</p>
           )}
