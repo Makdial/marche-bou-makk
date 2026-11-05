@@ -13,6 +13,7 @@ import { MyOrdersPage, OrderPage } from './pages/Orders';
 import { VendorOverviewPage, VendorOrdersPage, VendorProductsPage, VendorStorePage } from './pages/VendorPages';
 import { VendorPlanPage } from './pages/VendorPlan';
 import { StorePage } from './pages/StorePage';
+import { GpProfilePage } from './pages/GpProfilePage';
 import { AdminSubscriptionsPage } from './pages/AdminSubscriptions';
 import { ConductorHomePage, ConductorEarningsPage } from './pages/ConductorPages';
 import { GpDashboardPage, GpPeoplePage } from './pages/GpPages';
@@ -67,6 +68,7 @@ export default function App() {
             <Route path="shop" element={<ShopPage />} />
             <Route path="shop/products/:id" element={<ProductPage />} />
           <Route path="shop/stores/:id" element={<StorePage />} />
+            <Route path="shop/gps/:id" element={<GpProfilePage />} />
             <Route path="cart" element={<CartPage />} />
             <Route path="checkout" element={<CheckoutPage />} />
             <Route path="orders" element={<MyOrdersPage />} />

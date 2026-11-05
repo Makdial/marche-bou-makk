@@ -20,7 +20,7 @@ import { storeTransportCents } from '../shared/plans';
 import type { PlanId } from '../shared/types';
 import { translate, type Params } from '../shared/i18n';
 import type { TranslationKey } from '../shared/i18n/en';
-import { JOB_STATUSES, OPEN_STATUSES } from '../shared/status';
+import { DELIVERY_STATUSES, JOB_STATUSES, OPEN_STATUSES } from '../shared/status';
 import type {
   OrderEvent,
   OrderItem,
@@ -270,6 +270,15 @@ export function checkout(buyer: AuthUser, input: z.infer<typeof checkoutSchema>)
       data: { orderId, storeId: group.storeId },
     });
     const admins = sql.all<{ id: number }>("SELECT id FROM users WHERE role = 'admin' AND status = 'active'").map((r) => r.id);
+    if (input.paymentMethod === 'mobile_money') {
+      notify([group.ownerId], {
+        type: 'order.paid',
+        titleKey: 'notif.paidOnline.title',
+        bodyKey: 'notif.paidOnline.body',
+        params: { id: orderId, amount: formatMoney(group.totalCents, config.currency) },
+        data: { orderId, storeId: group.storeId },
+      });
+    }
     notify(admins, {
       type: 'order.placed',
       titleKey: 'notif.orderUpdate.title',
@@ -300,6 +309,8 @@ interface OrderRow {
   arrived_pickup_at: string | null;
   arrived_dropoff_at: string | null;
   delivery_photo_url: string | null;
+  picked_up_at: string | null;
+  cash_received_at: string | null;
   distance_km: number;
   dropoff_name: string;
   dropoff_phone: string | null;
@@ -327,7 +338,7 @@ interface OrderRow {
 }
 
 const ORDER_SELECT = `SELECT o.id, o.checkout_id, o.buyer_id, o.store_id, o.conductor_id, o.status,
-    o.payment_method, o.payment_status, o.subtotal_cents, o.delivery_fee_cents, o.store_transport_cents, o.commission_cents, o.total_cents, o.arrived_pickup_at, o.arrived_dropoff_at, o.delivery_photo_url,
+    o.payment_method, o.payment_status, o.subtotal_cents, o.delivery_fee_cents, o.store_transport_cents, o.commission_cents, o.total_cents, o.arrived_pickup_at, o.arrived_dropoff_at, o.delivery_photo_url, o.picked_up_at, o.cash_received_at,
     o.distance_km, o.dropoff_name, o.dropoff_phone, o.dropoff_address, o.dropoff_lat, o.dropoff_lng, o.dropoff_notes,
     o.created_at, o.updated_at, o.delivered_at,
     s.name AS store_name, s.address AS store_address, s.lat AS store_lat, s.lng AS store_lng,
@@ -370,7 +381,7 @@ function canView(row: Pick<OrderRow, 'buyer_id' | 'store_owner_id' | 'conductor_
 
 function etaFor(row: OrderRow): number | null {
   if (!OPEN_STATUSES.includes(row.status)) return null;
-  if (row.status === 'out_for_delivery' && row.conductor_lat !== null && row.conductor_lng !== null) {
+  if ((row.status === 'picked_up' || row.status === 'out_for_delivery') && row.conductor_lat !== null && row.conductor_lng !== null) {
     return travelMinutes(
       distanceKm({ lat: row.conductor_lat, lng: row.conductor_lng }, { lat: row.dropoff_lat, lng: row.dropoff_lng }),
     );
@@ -384,7 +395,7 @@ function toView(row: OrderRow, items: ItemRow[], events: EventRow[], viewer: Aut
   const isOwnBuyer = viewer.role === 'buyer' && viewer.id === row.buyer_id;
   const isVendor = viewer.role === 'vendor';
   const isOwnConductor = viewer.role === 'conductor' && viewer.id === row.conductor_id;
-  const seesDriverLocation = isAdmin || isOwnBuyer;
+  const seesDriverLocation = isAdmin || isOwnBuyer || isVendor || isOwnConductor;
   const seesDropoff = isAdmin || isOwnBuyer || isOwnConductor;
   return {
     id: row.id,
@@ -398,11 +409,14 @@ function toView(row: OrderRow, items: ItemRow[], events: EventRow[], viewer: Aut
     totalCents: row.total_cents,
     arrivedPickupAt: row.arrived_pickup_at,
     arrivedDropoffAt: row.arrived_dropoff_at,
+    pickedUpAt: row.picked_up_at,
+    cashReceivedAt: row.cash_received_at,
     deliveryPhotoUrl: row.delivery_photo_url,
     distanceKm: row.distance_km,
     etaMinutes: etaFor(row),
     store: {
       id: row.store_id,
+      ownerId: row.store_owner_id,
       name: row.store_name,
       address: row.store_address,
       lat: row.store_lat,
@@ -430,7 +444,7 @@ function toView(row: OrderRow, items: ItemRow[], events: EventRow[], viewer: Aut
             id: row.conductor_id,
             name: row.conductor_name,
             vehicle: row.conductor_vehicle ?? 'moto',
-            phone: isAdmin || isOwnBuyer || isOwnConductor ? row.conductor_phone : null,
+            phone: seesDriverLocation ? row.conductor_phone : null,
             lat: seesDriverLocation ? row.conductor_lat : null,
             lng: seesDriverLocation ? row.conductor_lng : null,
             locationUpdatedAt: seesDriverLocation ? row.conductor_location_at : null,
@@ -545,7 +559,7 @@ export function listAllOrders(status: OrderStatus | undefined, admin: AuthUser):
 
 export function activeDeliveryFor(conductor: AuthUser): OrderView | null {
   const row = sql.get<{ id: number }>(
-    `SELECT id FROM orders WHERE conductor_id = ? AND status IN ('preparing', 'ready', 'out_for_delivery') ORDER BY id DESC LIMIT 1`,
+    `SELECT id FROM orders WHERE conductor_id = ? AND status IN (${sqlIn(DELIVERY_STATUSES)}) ORDER BY id DESC LIMIT 1`,
     conductor.id,
   );
   return row ? getOrderFor(row.id, conductor) : null;
@@ -646,11 +660,11 @@ function notifyOrderUpdate(
   });
 }
 
-function notifyAssigned(row: OrderRow, conductor: { id: number; name: string }, messageKey: TranslationKey): void {
+// The buyer and the store get the driver's name, vehicle and phone in one notification, at the same moment.
+function notifyAssigned(row: OrderRow, conductor: { id: number; name: string }): void {
   const data = { orderId: row.id };
-  const params = { name: conductor.name };
-  notifyOrderUpdate([row.buyer_id], 'order.assigned', row.id, row.status, messageKey, params);
-  notifyOrderUpdate([row.store_owner_id], 'order.assigned', row.id, row.status, messageKey, params);
+  const params = { name: conductor.name, vehicle: `@vehicle.${row.conductor_vehicle ?? 'moto'}`, phone: row.conductor_phone ?? '-' };
+  notifyOrderUpdate([row.buyer_id, row.store_owner_id], 'order.assigned', row.id, row.status, 'notif.driverAssigned', params);
   notify([conductor.id], {
     type: 'job.assigned',
     titleKey: 'notif.jobAssigned.title',
@@ -759,6 +773,49 @@ export function vendorReady(actor: AuthUser, orderId: number): OrderView {
   return getOrderFor(orderId, actor);
 }
 
+export function vendorPickedUp(actor: AuthUser, orderId: number): OrderView {
+  const row = requireVisibleOrder(orderId, actor);
+  requireStatus(row, ['ready'], 'err.notReady');
+  if (row.conductor_id === null) throw new HttpError(409, 'err.driverNotAssigned');
+  const params: Params = { name: row.conductor_name ?? '' };
+  tx(() => {
+    moveOrder(orderId, ['ready'], 'picked_up', actor.id, 'event.handedOver', params, 'conductor_id IS NOT NULL');
+    sql.run('UPDATE orders SET picked_up_at = ? WHERE id = ?', now(), orderId);
+  });
+  notifyOrderUpdate([row.buyer_id], 'order.picked_up', orderId, 'picked_up', 'event.handedOver', params);
+  notifyOrderUpdate([row.conductor_id], 'order.picked_up', orderId, 'picked_up', 'event.handedOver', params);
+  const adminsHanded = sql.all<{ id: number }>("SELECT id FROM users WHERE role = 'admin' AND status = 'active'").map((r) => r.id);
+  notify(adminsHanded, {
+    type: 'order.picked_up',
+    titleKey: 'notif.orderUpdate.title',
+    bodyKey: 'event.handedOver',
+    params: { id: orderId, status: '@status.picked_up', ...params },
+    data: { orderId },
+  });
+  return getOrderFor(orderId, actor);
+}
+
+export function vendorCashReceived(actor: AuthUser, orderId: number): OrderView {
+  const row = requireVisibleOrder(orderId, actor);
+  if (row.payment_method !== 'cash') throw new HttpError(409, 'err.cashNotDue');
+  requireStatus(row, ['delivered'], 'err.cashNotDue');
+  const confirmedAt = now();
+  tx(() => {
+    const info = sql.run(
+      "UPDATE orders SET cash_received_at = ?, updated_at = ? WHERE id = ? AND payment_method = 'cash' AND cash_received_at IS NULL AND status = 'delivered'",
+      confirmedAt,
+      confirmedAt,
+      orderId,
+    );
+    if (info.changes !== 1) throw new HttpError(409, 'err.cashNotDue');
+    addEvent(orderId, 'delivered', 'event.cashReceived', actor.id);
+  });
+  if (row.conductor_id !== null) {
+    notifyOrderUpdate([row.conductor_id], 'order.cash_received', orderId, 'delivered', 'event.cashReceived');
+  }
+  return getOrderFor(orderId, actor);
+}
+
 export function buyerCancel(actor: AuthUser, orderId: number): OrderView {
   const row = requireVisibleOrder(orderId, actor);
   requireStatus(row, ['placed'], 'err.cannotCancel');
@@ -789,7 +846,7 @@ export function conductorAccept(actor: AuthUser, orderId: number): OrderView {
   const params = { name: actor.name };
   const assigned = tx(() => assignConductor(orderId, null, actor.id, 'event.assigned', actor.id, params));
   if (!assigned) throw new HttpError(409, 'err.jobTaken');
-  notifyAssigned(loadOrderRow(orderId), { id: actor.id, name: actor.name }, 'event.assigned');
+  notifyAssigned(loadOrderRow(orderId), { id: actor.id, name: actor.name });
   const adminsAcc = sql.all<{ id: number }>("SELECT id FROM users WHERE role = 'admin' AND status = 'active'").map((r) => r.id);
   notify(adminsAcc, {
     type: 'order.assigned',
@@ -814,7 +871,7 @@ export function conductorArrivePickup(actor: AuthUser, orderId: number): OrderVi
 
 export function conductorArriveDropoff(actor: AuthUser, orderId: number): OrderView {
   const row = requireAssignedOrder(orderId, actor);
-  requireStatus(row, ['out_for_delivery'], 'err.pickupFirst');
+  requireStatus(row, ['out_for_delivery'], row.status === 'picked_up' ? 'err.onTheWayFirst' : 'err.pickupFirst');
   const profile = getConductorProfile(actor.id);
   if (!profile || profile.lat === null || profile.lng === null) throw new HttpError(409, 'err.conductorProfile');
   const dist = distanceKm({ lat: profile.lat, lng: profile.lng }, { lat: row.dropoff_lat, lng: row.dropoff_lng });
@@ -825,26 +882,25 @@ export function conductorArriveDropoff(actor: AuthUser, orderId: number): OrderV
 
 export function conductorPickup(actor: AuthUser, orderId: number): OrderView {
   const row = requireAssignedOrder(orderId, actor);
-  requireStatus(row, ['ready'], 'err.notReady');
+  requireStatus(row, ['ready'], row.status === 'picked_up' ? 'err.orderChanged' : 'err.notReady');
   const profile = getConductorProfile(actor.id);
   if (!profile || profile.lat === null || profile.lng === null) throw new HttpError(409, 'err.conductorProfile');
   const dist = distanceKm({ lat: profile.lat, lng: profile.lng }, { lat: row.store_lat, lng: row.store_lng });
   if (dist > 0.2) throw new HttpError(409, 'err.notOnLocation');
   const params = { name: actor.name };
+  const pickedAt = now();
   tx(() => {
-    moveOrder(orderId, ['ready'], 'out_for_delivery', actor.id, 'event.pickedUp', params, 'conductor_id = ?', [
-      actor.id,
-    ]);
-    sql.run('UPDATE orders SET arrived_pickup_at = ? WHERE id = ?', now(), orderId);
+    moveOrder(orderId, ['ready'], 'picked_up', actor.id, 'event.pickedUp', params, 'conductor_id = ?', [actor.id]);
+    sql.run('UPDATE orders SET arrived_pickup_at = COALESCE(arrived_pickup_at, ?), picked_up_at = ? WHERE id = ?', pickedAt, pickedAt, orderId);
   });
-  notifyOrderUpdate([row.buyer_id], 'order.picked_up', orderId, 'out_for_delivery', 'event.pickedUp', params);
-  notifyOrderUpdate([row.store_owner_id], 'order.picked_up', orderId, 'out_for_delivery', 'event.pickedUp', params);
+  notifyOrderUpdate([row.buyer_id], 'order.picked_up', orderId, 'picked_up', 'event.pickedUp', params);
+  notifyOrderUpdate([row.store_owner_id], 'order.picked_up', orderId, 'picked_up', 'event.pickedUp', params);
   const adminsPickup = sql.all<{ id: number }>("SELECT id FROM users WHERE role = 'admin' AND status = 'active'").map((r) => r.id);
   notify(adminsPickup, {
     type: 'order.picked_up',
     titleKey: 'notif.orderUpdate.title',
     bodyKey: 'event.pickedUp',
-    params: { id: orderId, status: '@status.out_for_delivery', name: actor.name },
+    params: { id: orderId, status: '@status.picked_up', name: actor.name },
     data: { orderId },
   });
   notify([actor.id], {
@@ -857,9 +913,27 @@ export function conductorPickup(actor: AuthUser, orderId: number): OrderView {
   return getOrderFor(orderId, actor);
 }
 
+export function conductorOnTheWay(actor: AuthUser, orderId: number): OrderView {
+  const row = requireAssignedOrder(orderId, actor);
+  requireStatus(row, ['picked_up'], row.status === 'ready' ? 'err.pickupBeforeTrip' : 'err.orderChanged');
+  const params = { name: actor.name };
+  tx(() => moveOrder(orderId, ['picked_up'], 'out_for_delivery', actor.id, 'event.onTheWay', params, 'conductor_id = ?', [actor.id]));
+  notifyOrderUpdate([row.buyer_id], 'order.on_the_way', orderId, 'out_for_delivery', 'event.onTheWay', params);
+  notifyOrderUpdate([row.store_owner_id], 'order.on_the_way', orderId, 'out_for_delivery', 'event.onTheWay', params);
+  const adminsWay = sql.all<{ id: number }>("SELECT id FROM users WHERE role = 'admin' AND status = 'active'").map((r) => r.id);
+  notify(adminsWay, {
+    type: 'order.on_the_way',
+    titleKey: 'notif.orderUpdate.title',
+    bodyKey: 'event.onTheWay',
+    params: { id: orderId, status: '@status.out_for_delivery', name: actor.name },
+    data: { orderId },
+  });
+  return getOrderFor(orderId, actor);
+}
+
 export function conductorDeliver(actor: AuthUser, orderId: number, photoUrl?: string | null): OrderView {
   const row = requireAssignedOrder(orderId, actor);
-  requireStatus(row, ['out_for_delivery'], 'err.pickupFirst');
+  requireStatus(row, ['out_for_delivery'], row.status === 'picked_up' ? 'err.onTheWayFirst' : 'err.pickupFirst');
   const profile = getConductorProfile(actor.id);
   if (!profile || profile.lat === null || profile.lng === null) throw new HttpError(409, 'err.conductorProfile');
   const dist = distanceKm({ lat: profile.lat, lng: profile.lng }, { lat: row.dropoff_lat, lng: row.dropoff_lng });
@@ -882,11 +956,14 @@ export function conductorDeliver(actor: AuthUser, orderId: number, photoUrl?: st
   });
   const data = { orderId };
   notifyOrderUpdate([row.buyer_id], 'order.delivered', orderId, 'delivered', 'event.delivered');
+  const isCash = row.payment_method === 'cash';
   notify([row.store_owner_id], {
     type: 'order.delivered',
     titleKey: 'notif.payout.title',
-    bodyKey: 'notif.payout.body',
-    params: { id: orderId, payout: formatMoney(row.subtotal_cents - row.commission_cents - row.store_transport_cents, config.currency) },
+    bodyKey: isCash ? 'notif.cashToConfirm.body' : 'notif.payout.body',
+    params: isCash
+      ? { id: orderId, amount: formatMoney(row.total_cents, config.currency) }
+      : { id: orderId, payout: formatMoney(row.subtotal_cents - row.commission_cents - row.store_transport_cents, config.currency) },
     data: { ...data, deliveryPhotoUrl: photoUrl || null },
   });
   const adminsDeliver = sql.all<{ id: number }>("SELECT id FROM users WHERE role = 'admin' AND status = 'active'").map((r) => r.id);
@@ -927,7 +1004,7 @@ export function adminAssign(actor: AuthUser, orderId: number, conductorId: numbe
       data: { orderId },
     });
   }
-  notifyAssigned(loadOrderRow(orderId), { id: target.userId, name: target.name }, 'event.dispatched');
+  notifyAssigned(loadOrderRow(orderId), { id: target.userId, name: target.name });
   return getOrderFor(orderId, actor);
 }
 
@@ -947,7 +1024,7 @@ export function autoDispatch(): { assigned: number; unassigned: number } {
     if (!done) continue;
     assigned += 1;
     free.splice(free.indexOf(pick), 1);
-    notifyAssigned(loadOrderRow(job.id), { id: pick.userId, name: pick.name }, 'event.autoDispatched');
+    notifyAssigned(loadOrderRow(job.id), { id: pick.userId, name: pick.name });
   }
   return { assigned, unassigned: open.length - assigned };
 }

@@ -5,6 +5,7 @@ import { useApi } from '../hooks';
 import { useI18n } from '../i18n';
 import { renderMessage, tr } from '../i18n';
 import { timeAgo } from '../format';
+import { Icon } from '../icons';
 import type { NotificationItem } from '../../shared/types';
 
 export function NotificationsMenu({ unread }: { unread: number }) {
@@ -32,6 +33,7 @@ export function NotificationsMenu({ unread }: { unread: number }) {
   return (
     <div className="notif-menu" ref={ref}>
       <button type="button" className="nav-link notif-trigger" onClick={() => setOpen((v) => !v)}>
+        <Icon name="bell" />
         <span>{t('nav.notifications')}</span>
         {unread > 0 && <span className="count alert">{unread}</span>}
       </button>
@@ -57,7 +59,7 @@ export function NotificationsMenu({ unread }: { unread: number }) {
                   className="notif-dropdown-item"
                   onClick={() => {
                     setOpen(false);
-                    navigate('/notifications');
+                    navigate(typeof item.data.orderId === 'number' ? `/orders/${item.data.orderId}` : '/notifications');
                   }}
                 >
                   <span className="notif-dropdown-title">{renderMessage(item.titleKey, item.params, item.title)}</span>

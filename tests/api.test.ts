@@ -88,6 +88,118 @@ after(async () => {
   await new Promise<void>((resolve) => server.close(() => resolve()));
 });
 
+function packageBody(receiverPhone: string) {
+  return {
+    senderName: 'Fatou Ndiaye',
+    senderPhone: '+33 6 12 34 56 78',
+    receiverName: 'Receiver Diop',
+    receiverPhone,
+    receiverAddress: 'Rue 10, Médina, Dakar',
+    receiverLat: 14.6937,
+    receiverLng: -17.4441,
+    weightKg: 4.5,
+    priceCents: 1500000,
+  };
+}
+
+describe('international packages', () => {
+  it('moves a package through every step and tells the receiver, the GP and the courier', async () => {
+    const admin = await login('admin@market.local', 'admin1234');
+    const courierEmail = `courier-${Date.now()}@test.local`;
+    const courierRegister = await api('POST', '/api/auth/register', {
+      body: { role: 'conductor', name: 'Package Courier', email: courierEmail, password: 'demo1234', phone: '+221 77 400 00 22', vehicle: 'moto' },
+    });
+    assert.equal(courierRegister.status, 201, JSON.stringify(courierRegister.data));
+    const approved = await api('PATCH', `/api/admin/users/${courierRegister.data.user.id}`, { token: admin, body: { status: 'active' } });
+    assert.equal(approved.status, 200, JSON.stringify(approved.data));
+    const courier = await login(courierEmail);
+    assert.equal((await api('PUT', '/api/conductor/status', { token: courier, body: { isOnline: true } })).status, 200);
+    assert.equal((await api('POST', '/api/conductor/location', { token: courier, body: { lat: 14.6928, lng: -17.4467 } })).status, 200);
+
+    const receiverRegister = await api('POST', '/api/auth/register', {
+      body: {
+        role: 'buyer',
+        name: 'Receiver Diop',
+        email: `receiver-${Date.now()}@test.local`,
+        password: 'demo1234',
+        phone: '+221 77 555 00 11',
+        address: 'Rue 10, Médina, Dakar',
+        lat: 14.6937,
+        lng: -17.4441,
+      },
+    });
+    assert.equal(receiverRegister.status, 201, JSON.stringify(receiverRegister.data));
+    const receiver = receiverRegister.data.token;
+
+    const gp = await login('gp@market.local');
+    const created = await api('POST', '/api/gp/shipments', { token: gp, body: packageBody('77 555 00 11') });
+    assert.equal(created.status, 201, JSON.stringify(created.data));
+    const id: number = created.data.shipment.id;
+    assert.equal(created.data.shipment.status, 'registered');
+    assert.equal(created.data.shipment.senderPhone, '+33 6 12 34 56 78', 'the GP sees the sender phone');
+    assert.ok((await notificationsOf(receiver)).some((item) => item.type === 'package.registered'), 'the receiver is told about the package');
+
+    const shopperList = await api('GET', '/api/packages', { token: receiver });
+    assert.equal(shopperList.status, 200);
+    const mine = shopperList.data.packages.find((item: any) => item.id === id);
+    assert.ok(mine, 'the receiver sees the package, matched by phone number');
+    assert.equal(mine.senderPhone, null, 'the receiver never sees the sender phone');
+    assert.equal(mine.receiverPhone, null);
+
+    const pickedUp = await api('PATCH', `/api/gp/shipments/${id}`, { token: gp, body: { status: 'picked_up' } });
+    assert.equal(pickedUp.status, 200, JSON.stringify(pickedUp.data));
+    assert.equal(pickedUp.data.shipment.status, 'picked_up');
+    assert.ok((await notificationsOf(receiver)).some((item) => item.type === 'package.pickedUp'));
+
+    const board = await api('GET', '/api/conductor/overview', { token: courier });
+    assert.ok(board.data.jobs.some((job: any) => job.kind === 'package' && job.id === id), 'the courier sees the package job');
+
+    const accepted = await api('POST', `/api/conductor/packages/${id}/accept`, { token: courier });
+    assert.equal(accepted.status, 200, JSON.stringify(accepted.data));
+    assert.equal(accepted.data.package.conductor.name, 'Package Courier');
+    assert.ok((await notificationsOf(receiver)).some((item) => item.type === 'package.assigned'));
+    assert.ok((await notificationsOf(gp)).some((item) => item.type === 'package.assigned'));
+
+    const again = await api('PATCH', `/api/gp/shipments/${id}`, { token: gp, body: { status: 'picked_up' } });
+    assert.equal(again.status, 409, 'a package cannot go back to an earlier step');
+
+    const pickup = await api('POST', `/api/conductor/packages/${id}/pickup`, { token: courier });
+    assert.equal(pickup.status, 200, JSON.stringify(pickup.data));
+    assert.equal(pickup.data.package.status, 'out_for_delivery');
+    assert.ok((await notificationsOf(receiver)).some((item) => item.type === 'package.onTheWay'));
+
+    const early = await api('POST', `/api/conductor/packages/${id}/deliver`, { token: courier, body: { photoUrl: '/uploads/proof.jpg' } });
+    assert.equal(early.status, 409, 'the courier must be at the receiver before delivering');
+
+    await api('POST', '/api/conductor/location', { token: courier, body: { lat: 14.6937, lng: -17.4441 } });
+    const delivered = await api('POST', `/api/conductor/packages/${id}/deliver`, { token: courier, body: { photoUrl: '/uploads/proof.jpg' } });
+    assert.equal(delivered.status, 200, JSON.stringify(delivered.data));
+    assert.equal(delivered.data.package.status, 'delivered');
+    assert.equal(delivered.data.package.proofPhotoUrl, '/uploads/proof.jpg');
+    assert.ok((await notificationsOf(receiver)).some((item) => item.type === 'package.delivered'));
+
+    const finalList = await api('GET', '/api/packages', { token: receiver });
+    assert.equal(finalList.data.packages.find((item: any) => item.id === id).status, 'delivered');
+    const otherShopper = await api('GET', '/api/packages', { token: await login('buyer@market.local') });
+    assert.ok(!otherShopper.data.packages.some((item: any) => item.id === id), 'other shoppers do not see it');
+    assert.equal((await api('PUT', '/api/conductor/status', { token: courier, body: { isOnline: false } })).status, 200);
+  });
+
+  it('lets the GP hand a package over at the drop-off when no courier is needed', async () => {
+    const gp = await login('gp@market.local');
+    const created = await api('POST', '/api/gp/shipments', { token: gp, body: packageBody('77 555 00 11') });
+    assert.equal(created.status, 201, JSON.stringify(created.data));
+    const id: number = created.data.shipment.id;
+    const pickedUp = await api('PATCH', `/api/gp/shipments/${id}`, { token: gp, body: { status: 'picked_up' } });
+    assert.equal(pickedUp.status, 200, JSON.stringify(pickedUp.data));
+    const handed = await api('PATCH', `/api/gp/shipments/${id}`, { token: gp, body: { status: 'delivered', proofPhotoUrl: '/uploads/handover.jpg' } });
+    assert.equal(handed.status, 200, JSON.stringify(handed.data));
+    assert.equal(handed.data.shipment.status, 'delivered');
+    const back = await api('PATCH', `/api/gp/shipments/${id}`, { token: gp, body: { status: 'picked_up' } });
+    assert.equal(back.status, 409, 'a delivered package cannot be moved back');
+  });
+});
+
 describe('catalog and multi-vendor offers', () => {
   it('lists one product with offers from several vendors', async () => {
     const res = await api('GET', '/api/products?q=baguette');
@@ -168,6 +280,7 @@ describe('notifications for a specific product', () => {
 describe('ordering, delivery and cancellations', () => {
   let grocerOrderId: number;
   let bakeryOrderId: number;
+  let handedOverOrderId: number;
 
   it('splits a cart with two stores into one order per store', async () => {
     const token = await login('buyer2@market.local');
@@ -206,6 +319,9 @@ describe('ordering, delivery and cancellations', () => {
     assert.equal(newOrder.titleKey, 'notif.new.title');
     assert.equal(newOrder.params.buyer, 'Moussa');
     assert.equal(newOrder.title, `New order #${grocerOrderId}`);
+    const paid = vendorNotes.find((note) => note.type === 'order.paid' && note.data.orderId === grocerOrderId);
+    assert.ok(paid, 'the store should hear when an online payment comes in');
+    assert.equal(paid.title, `Paid online · Order #${grocerOrderId}`);
   });
 
   it('restocks items when the buyer cancels a placed order', async () => {
@@ -251,7 +367,14 @@ describe('ordering, delivery and cancellations', () => {
     assert.equal((await api('POST', `/api/vendor/orders/${grocerOrderId}/ready`, { token: vendorToken })).status, 200);
     const readyOrder = await api('GET', `/api/orders/${grocerOrderId}`, { token: aminataToken });
     await api('POST', '/api/conductor/location', { token: aminataToken, body: { lat: readyOrder.data.order.store.lat, lng: readyOrder.data.order.store.lng } });
-    assert.equal((await api('POST', `/api/conductor/orders/${grocerOrderId}/pickup`, { token: aminataToken })).status, 200);
+    const pickup = await api('POST', `/api/conductor/orders/${grocerOrderId}/pickup`, { token: aminataToken });
+    assert.equal(pickup.status, 200);
+    assert.equal(pickup.data.order.status, 'picked_up');
+    const deliverTooEarly = await api('POST', `/api/conductor/orders/${grocerOrderId}/deliver`, { token: aminataToken, body: { photoUrl: '/uploads/proof.jpg' } });
+    assert.equal(deliverTooEarly.status, 409, 'the driver must start the trip before delivering');
+    const onWay = await api('POST', `/api/conductor/orders/${grocerOrderId}/on-the-way`, { token: aminataToken });
+    assert.equal(onWay.status, 200, JSON.stringify(onWay.data));
+    assert.equal(onWay.data.order.status, 'out_for_delivery');
     const deliveredOrder = await api('GET', `/api/orders/${grocerOrderId}`, { token: aminataToken });
     await api('POST', '/api/conductor/location', { token: aminataToken, body: { lat: deliveredOrder.data.order.dropoff.lat, lng: deliveredOrder.data.order.dropoff.lng } });
     const delivered = await api('POST', `/api/conductor/orders/${grocerOrderId}/deliver`, { token: aminataToken, body: { photoUrl: '/uploads/proof.jpg' } });
@@ -270,6 +393,10 @@ describe('ordering, delivery and cancellations', () => {
       const notes = await notificationsOf(await login(email));
       assert.ok(notes.some((note) => note.type === type && note.data.orderId === grocerOrderId), `${email} should hear about delivery`);
     }
+    const buyerSteps = await notificationsOf(await login('buyer2@market.local'));
+    for (const type of ['order.picked_up', 'order.on_the_way']) {
+      assert.ok(buyerSteps.some((note) => note.type === type && note.data.orderId === grocerOrderId), `buyer should hear about ${type}`);
+    }
   });
 
   it('records each order step as a translation key with its English text', async () => {
@@ -277,11 +404,13 @@ describe('ordering, delivery and cancellations', () => {
     const order = (await api('GET', `/api/orders/${grocerOrderId}`, { token: buyerToken })).data.order;
     assert.deepEqual(
       order.events.map((event: any) => event.messageKey),
-      ['event.placed', 'event.accepted', 'event.assigned', 'event.ready', 'event.pickedUp', 'event.delivered'],
+      ['event.placed', 'event.accepted', 'event.assigned', 'event.ready', 'event.pickedUp', 'event.onTheWay', 'event.delivered'],
     );
     const pickedUp = order.events.find((event: any) => event.messageKey === 'event.pickedUp');
     assert.deepEqual(pickedUp.params, { name: 'Aminata Sarr' });
-    assert.equal(pickedUp.message, 'Aminata Sarr picked up the order and is on the way.');
+    assert.equal(pickedUp.message, 'Aminata Sarr picked up the order from the store.');
+    const onTheWay = order.events.find((event: any) => event.messageKey === 'event.onTheWay');
+    assert.equal(onTheWay.message, 'Aminata Sarr is on the way to the customer.');
 
     const accepted = (await notificationsOf(buyerToken)).find(
       (note) => note.type === 'order.accepted' && note.data.orderId === grocerOrderId,
@@ -293,6 +422,119 @@ describe('ordering, delivery and cancellations', () => {
     assert.equal(accepted.title, `Order #${grocerOrderId} · Preparing`);
     assert.equal(accepted.body, 'Store accepted the order and started preparing it.');
     assert.equal('i18n' in accepted.data, false, 'translation details stay out of the data');
+  });
+
+  it('lets the store hand a ready order to the driver before the driver starts the trip', async () => {
+    const buyerToken = await login('buyer@market.local');
+    const bananasId = await offerId(buyerToken, 'Bananes (1 kg)', 'Épicerie Keur Fatou');
+    const placed = await api('POST', '/api/orders', {
+      token: buyerToken,
+      body: { items: [{ offerId: bananasId, quantity: 1 }], paymentMethod: 'cash', delivery: deliveryDetails },
+    });
+    assert.equal(placed.status, 201, JSON.stringify(placed.data));
+    handedOverOrderId = placed.data.orders[0].id;
+
+    const vendorToken = await login('vendor2@market.local');
+    const driverToken = await login('conductor2@market.local');
+    assert.equal((await api('POST', `/api/vendor/orders/${handedOverOrderId}/accept`, { token: vendorToken })).status, 200);
+    assert.equal((await api('POST', `/api/vendor/orders/${handedOverOrderId}/picked-up`, { token: vendorToken })).status, 409, 'the order is not ready yet');
+    assert.equal((await api('POST', `/api/vendor/orders/${handedOverOrderId}/ready`, { token: vendorToken })).status, 200);
+    assert.equal((await api('POST', `/api/vendor/orders/${handedOverOrderId}/picked-up`, { token: vendorToken })).status, 409, 'a driver must accept the job first');
+    assert.equal((await api('POST', `/api/conductor/jobs/${handedOverOrderId}/accept`, { token: driverToken })).status, 200);
+    const storeSpot = (await api('GET', `/api/orders/${handedOverOrderId}`, { token: driverToken })).data.order.store;
+    await api('POST', '/api/conductor/location', { token: driverToken, body: { lat: storeSpot.lat, lng: storeSpot.lng } });
+    const seenByDriver = await api('GET', `/api/orders/${handedOverOrderId}`, { token: driverToken });
+    assert.equal(seenByDriver.data.order.conductor.lat, storeSpot.lat, 'the driver should see their own position on the order');
+
+    const driverInfo = seenByDriver.data.order.conductor;
+    assert.ok(driverInfo.phone, 'the driver should have a phone number on file');
+    assert.equal(typeof seenByDriver.data.order.store.ownerId, 'number', 'the driver can open a chat with the store');
+    const vendorView = (await api('GET', `/api/orders/${handedOverOrderId}`, { token: vendorToken })).data.order;
+    assert.equal(vendorView.conductor.lat, storeSpot.lat, 'the vendor should see where the driver is');
+    assert.equal(vendorView.conductor.phone, driverInfo.phone, 'the vendor should be able to call the driver');
+    assert.equal(vendorView.dropoff, null, 'the vendor must not see the customer address');
+    const assignedNoteFor = async (token: string) =>
+      (await notificationsOf(token)).find((note) => note.type === 'order.assigned' && note.data.orderId === handedOverOrderId);
+    const buyerHeard = await assignedNoteFor(buyerToken);
+    const vendorHeard = await assignedNoteFor(vendorToken);
+    assert.ok(buyerHeard && vendorHeard, 'the buyer and the vendor should both hear which driver accepted');
+    for (const note of [buyerHeard, vendorHeard]) {
+      assert.equal(note.bodyKey, 'notif.driverAssigned');
+      assert.equal(note.params.name, 'Aminata Sarr');
+      assert.equal(note.params.phone, driverInfo.phone);
+      assert.equal(note.params.vehicle, `@vehicle.${driverInfo.vehicle}`);
+      assert.ok(note.body.startsWith('Aminata Sarr ('), note.body);
+      assert.ok(note.body.endsWith(`Phone: ${driverInfo.phone}.`), note.body);
+    }
+    assert.ok(
+      Math.abs(Date.parse(buyerHeard.createdAt) - Date.parse(vendorHeard.createdAt)) < 1000,
+      'the buyer and the vendor should get the driver details at the same moment',
+    );
+
+    const handed = await api('POST', `/api/vendor/orders/${handedOverOrderId}/picked-up`, { token: vendorToken });
+    assert.equal(handed.status, 200, JSON.stringify(handed.data));
+    assert.equal(handed.data.order.status, 'picked_up');
+    assert.ok(handed.data.order.pickedUpAt, 'the pickup time should be recorded');
+    assert.ok(
+      (await notificationsOf(buyerToken)).some((note) => note.type === 'order.picked_up' && note.data.orderId === handedOverOrderId),
+      'buyer should hear the order was picked up',
+    );
+    assert.ok(
+      (await notificationsOf(driverToken)).some((note) => note.type === 'order.picked_up' && note.data.orderId === handedOverOrderId),
+      'driver should hear the store handed over the order',
+    );
+
+    assert.equal((await api('POST', `/api/conductor/orders/${handedOverOrderId}/pickup`, { token: driverToken })).status, 409, 'the order is already picked up');
+    const onWay = await api('POST', `/api/conductor/orders/${handedOverOrderId}/on-the-way`, { token: driverToken });
+    assert.equal(onWay.status, 200, JSON.stringify(onWay.data));
+    assert.equal(onWay.data.order.status, 'out_for_delivery');
+    assert.ok(
+      (await notificationsOf(buyerToken)).some((note) => note.type === 'order.on_the_way' && note.data.orderId === handedOverOrderId),
+      'buyer should hear the driver is on the way',
+    );
+  });
+
+  it('asks the store to confirm cash only after a cash delivery', async () => {
+    const driverToken = await login('conductor2@market.local');
+    const vendorToken = await login('vendor2@market.local');
+    const before = await api('GET', `/api/orders/${handedOverOrderId}`, { token: driverToken });
+    await api('POST', '/api/conductor/location', { token: driverToken, body: { lat: before.data.order.dropoff.lat, lng: before.data.order.dropoff.lng } });
+    const delivered = await api('POST', `/api/conductor/orders/${handedOverOrderId}/deliver`, { token: driverToken, body: { photoUrl: '/uploads/proof.jpg' } });
+    assert.equal(delivered.status, 200, JSON.stringify(delivered.data));
+    assert.equal(delivered.data.order.status, 'delivered');
+
+    const cashNote = (await notificationsOf(vendorToken)).find((note) => note.type === 'order.delivered' && note.data.orderId === handedOverOrderId);
+    assert.equal(cashNote.bodyKey, 'notif.cashToConfirm.body');
+    assert.match(cashNote.body, /collected .+ in cash/);
+
+    const confirmed = await api('POST', `/api/vendor/orders/${handedOverOrderId}/cash-received`, { token: vendorToken });
+    assert.equal(confirmed.status, 200, JSON.stringify(confirmed.data));
+    assert.ok(confirmed.data.order.cashReceivedAt, 'the store confirmation should be recorded');
+    assert.equal(confirmed.data.order.events.at(-1).messageKey, 'event.cashReceived');
+    assert.equal((await api('POST', `/api/vendor/orders/${handedOverOrderId}/cash-received`, { token: vendorToken })).status, 409, 'cash is confirmed only once');
+    assert.ok(
+      (await notificationsOf(driverToken)).some((note) => note.type === 'order.cash_received' && note.data.orderId === handedOverOrderId),
+      'driver should hear the store confirmed the cash',
+    );
+    assert.equal(
+      (await api('POST', `/api/vendor/orders/${grocerOrderId}/cash-received`, { token: vendorToken })).status,
+      409,
+      'an online payment has no cash to confirm',
+    );
+  });
+
+  it('lets a driver attach a delivery photo, but not a shopper', async () => {
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', 'base64');
+    const upload = (token: string) =>
+      fetch(`${base}/api/uploads`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'image/png', Authorization: `Bearer ${token}` },
+        body: png,
+      });
+    const driverUpload = await upload(await login('conductor2@market.local'));
+    assert.equal(driverUpload.status, 201);
+    assert.match((await driverUpload.json()).url, /^\/uploads\/.+\.png$/);
+    assert.equal((await upload(await login('buyer@market.local'))).status, 403);
   });
 
   it('keeps the customer address away from vendors', async () => {

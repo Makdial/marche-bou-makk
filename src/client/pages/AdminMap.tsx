@@ -35,6 +35,9 @@ export function AdminMapPage() {
     : [];
   const online = data?.conductors.filter((conductor) => conductor.online).length ?? 0;
   const busy = data?.conductors.filter((conductor) => conductor.busy).length ?? 0;
+  const setKey = data
+    ? [...data.stores.map((store) => store.id), ...data.conductors.map((conductor) => conductor.id), ...data.orders.map((order) => order.id)].join(',')
+    : '';
 
   return (
     <div className="page">
@@ -58,7 +61,7 @@ export function AdminMapPage() {
       {data && (
         <Card>
           <MapCanvas tall>
-            <FitBounds points={points} />
+            <FitBounds points={points} fitKey={setKey} />
             {data.stores.map((store) => (
               <Marker
                 key={`store-${store.id}`}

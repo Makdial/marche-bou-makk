@@ -92,7 +92,7 @@ export function LiveProvider({ children }: { children: ReactNode }) {
         setTick((value) => value + 1);
         setUnread((count) => count + 1);
         playSound('notification');
-        addToast(title, body, '/notifications');
+        addToast(title, body, typeof item.data.orderId === 'number' ? `/orders/${item.data.orderId}` : '/notifications');
         if ('Notification' in window && Notification.permission === 'granted' && document.hidden) {
           new Notification(title, { body });
         }

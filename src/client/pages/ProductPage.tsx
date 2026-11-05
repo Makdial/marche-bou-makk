@@ -8,7 +8,7 @@ import { useAction, useApi } from '../hooks';
 import { useI18n } from '../i18n';
 import { useSettings } from '../settings';
 import { Badge, Card, ErrorState, Loading, Notice, ProductImage } from '../ui';
-import { ImageZoom } from '../components/ImageZoom';
+import { ImageZoom, type ZoomPhoto } from '../components/ImageZoom';
 import type { ProductDetail } from '../../shared/types';
 
 export function ProductPage() {
@@ -27,6 +27,13 @@ export function ProductPage() {
   const product = detail.data;
   if (!product) return null;
   const isBuyer = user?.role === 'buyer';
+  const photos: ZoomPhoto[] = [];
+  if (product.imageUrl) photos.push({ src: product.imageUrl, label: product.name });
+  for (const offer of product.offers) {
+    if (offer.imageUrl && !photos.some((photo) => photo.src === offer.imageUrl)) {
+      photos.push({ src: offer.imageUrl, label: t('zoom.photoFrom', { store: offer.storeName }) });
+    }
+  }
 
   async function toggleWatch() {
     const result = await action.run(() =>
@@ -61,11 +68,14 @@ export function ProductPage() {
       </Link>
 
       <div className="product-hero">
-        {product.imageUrl ? (
-  <ImageZoom src={product.imageUrl} alt={product.name} thumbnails={product.offers.filter((o) => o.imageUrl).map((o) => ({ src: o.imageUrl!, label: o.storeName }))} />
-) : (
-  <ProductImage name={product.name} url={null} size="lg" />
-)}
+        {photos.length > 0 ? (
+          <ImageZoom key={product.id} photos={photos} />
+        ) : (
+          <div className="image-zoom">
+            <ProductImage name={product.name} url={null} size="lg" />
+            <p className="muted small">{t('product.noPhoto')}</p>
+          </div>
+        )}
         <div className="stack">
           <span className="muted">
             {product.categoryName ? categoryLabel(product.categoryName) : t('shop.uncategorized')}
@@ -97,7 +107,7 @@ export function ProductPage() {
         {product.offers.length === 0 ? (
           <p className="muted">{t('product.noOffers')}</p>
         ) : (
-          <table className="table">
+          <table className="table offers-table">
             <thead>
               <tr>
                 <th>{t('common.store')}</th>
@@ -118,15 +128,15 @@ export function ProductPage() {
                       </Link>
                       <div className="muted small">{offer.storeAddress}</div>
                     </td>
-                    <td className="price">{money(offer.priceCents)}</td>
-                    <td>
+                    <td className="price" data-label={t('common.price')}>{money(offer.priceCents)}</td>
+                    <td data-label={t('product.availability')}>
                       {offer.stock > 0 ? (
                         <Badge tone="success">{t('product.left', { count: offer.stock })}</Badge>
                       ) : (
                         <Badge tone="danger">{t('shop.soldOut')}</Badge>
                       )}
                     </td>
-                    <td className="right">
+                    <td className="right offers-actions">
                       {isBuyer && offer.stock > 0 && (
                         <div className="row-actions">
                           <select

@@ -44,5 +44,6 @@ export function getPublicSettings(): PublicSettings {
     center: config.center,
     baseDeliveryFeeCents: settings.baseDeliveryFeeCents,
     perKmFeeCents: settings.perKmFeeCents,
+    lowStockThreshold: settings.lowStockThreshold,
   };
 }

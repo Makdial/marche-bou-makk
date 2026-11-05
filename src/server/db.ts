@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import { DatabaseSync, type StatementSync } from 'node:sqlite';
 import { config } from './config';
+import { phoneKey } from '../shared/phone';
 
 fs.mkdirSync(config.dataDir, { recursive: true });
 fs.mkdirSync(config.uploadsDir, { recursive: true });
@@ -232,9 +233,31 @@ export function migrate(): void {
   if (!orderCols.includes('arrived_pickup_at')) db.exec('ALTER TABLE orders ADD COLUMN arrived_pickup_at TEXT');
   if (!orderCols.includes('arrived_dropoff_at')) db.exec('ALTER TABLE orders ADD COLUMN arrived_dropoff_at TEXT');
   if (!orderCols.includes('delivery_photo_url')) db.exec('ALTER TABLE orders ADD COLUMN delivery_photo_url TEXT');
+  if (!orderCols.includes('picked_up_at')) db.exec('ALTER TABLE orders ADD COLUMN picked_up_at TEXT');
+  if (!orderCols.includes('cash_received_at')) db.exec('ALTER TABLE orders ADD COLUMN cash_received_at TEXT');
 
   const conductorCols = sql.all<{ name: string }>('PRAGMA table_info(conductors)').map((c) => c.name);
   if (!conductorCols.includes('address')) db.exec('ALTER TABLE conductors ADD COLUMN address TEXT');
+
+  const shipmentCols = sql.all<{ name: string }>('PRAGMA table_info(gp_shipments)').map((c) => c.name);
+  for (const [name, type] of [
+    ['receiver_address', 'TEXT'],
+    ['receiver_lat', 'REAL'],
+    ['receiver_lng', 'REAL'],
+    ['receiver_phone_key', 'TEXT'],
+    ['pickup_address', 'TEXT'],
+    ['pickup_lat', 'REAL'],
+    ['pickup_lng', 'REAL'],
+    ['conductor_id', 'INTEGER'],
+    ['assigned_at', 'TEXT'],
+    ['picked_up_at', 'TEXT'],
+    ['out_for_delivery_at', 'TEXT'],
+  ] as const) {
+    if (!shipmentCols.includes(name)) db.exec(`ALTER TABLE gp_shipments ADD COLUMN ${name} ${type}`);
+  }
+  for (const row of sql.all<{ id: number; receiver_phone: string }>('SELECT id, receiver_phone FROM gp_shipments WHERE receiver_phone_key IS NULL')) {
+    sql.run('UPDATE gp_shipments SET receiver_phone_key = ? WHERE id = ?', phoneKey(row.receiver_phone), row.id);
+  }
 
   // Give existing stores a 30-day selling window if they do not have one yet.
   db.exec("UPDATE stores SET sells_until = datetime('now', '+30 days'), plan = COALESCE(plan, 'trial') WHERE sells_until IS NULL");

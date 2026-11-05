@@ -12,6 +12,7 @@ import { conductorRouter } from './routes/conductor';
 import { gpRouter } from './routes/gp';
 import { notificationsRouter } from './routes/notifications';
 import { ordersRouter } from './routes/orders';
+import { packagesRouter } from './routes/packages';
 import { publicRouter } from './routes/public';
 import { vendorRouter } from './routes/vendor';
 
@@ -40,6 +41,7 @@ export function createApp() {
   app.use('/api', publicRouter);
   app.use('/api/auth', authRouter);
   app.use('/api/orders', ordersRouter);
+  app.use('/api/packages', packagesRouter);
   app.use('/api/vendor', vendorRouter);
   app.use('/api/conductor', conductorRouter);
 app.use('/api/gp', gpRouter);

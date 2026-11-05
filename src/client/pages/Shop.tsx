@@ -7,7 +7,8 @@ import { categoryLabel, mapsUrl } from '../format';
 import { useApi, useDebounced } from '../hooks';
 import { useI18n } from '../i18n';
 import { useSettings } from '../settings';
-import { Badge, Card, Empty, ErrorState, Loading, PageHeader, ProductImage } from '../ui';
+import { Badge, Card, Empty, ErrorState, Loading, ProductImage } from '../ui';
+import { Icon } from '../icons';
 import type { Category, ProductSummary, PublicGp, PublicStore } from '../../shared/types';
 
 export function ShopPage() {
@@ -36,7 +37,22 @@ export function ShopPage() {
 
   return (
     <div className="page">
-      <PageHeader title={t('shop.title')} subtitle={t('shop.subtitle')} />
+      <section className="hero">
+        <div className="stack">
+          <h1>{t('shop.heroTitle')}</h1>
+          <p>{t('shop.subtitle')}</p>
+        </div>
+        <div className="hero-search">
+          <Icon name="search" />
+          <input
+            type="search"
+            aria-label={t('shop.searchPlaceholder')}
+            placeholder={t('shop.searchPlaceholder')}
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+        </div>
+      </section>
 
       <Card
         title={t('map.storesOnMap')}
@@ -80,7 +96,12 @@ export function ShopPage() {
               </Marker>
             ))}
             {gps.data?.map((gp) => (
-              <Marker key={`gp-${gp.id}`} position={[gp.lat, gp.lng]} icon={pinIcon('conductor', '🌍')}>
+              <Marker
+                key={`gp-${gp.id}`}
+                position={[gp.lat, gp.lng]}
+                icon={pinIcon('conductor', '🌍')}
+                eventHandlers={{ click: () => navigate(`/shop/gps/${gp.id}`) }}
+              >
                 <Tooltip direction="top" offset={[0, -12]} opacity={0.95}>
                   <strong>{gp.name}</strong>
                   <br />
@@ -94,6 +115,8 @@ export function ShopPage() {
                   {gp.country && <>{t('shop.fromCountry', { country: gp.country })}<br /></>}
                   {gp.address && <>{gp.address}<br /></>}
                   <span className="muted small">{t('shop.gpDropoff')}</span>
+                  <br />
+                  <Link to={`/shop/gps/${gp.id}`}>{t('gp.viewProfile')}</Link>
                 </Popup>
               </Marker>
             ))}
@@ -102,21 +125,31 @@ export function ShopPage() {
       </Card>
 
       <div className="toolbar">
-        <input
-          className="grow"
-          placeholder={t('shop.searchPlaceholder')}
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-        />
-        <select value={categoryId} onChange={(event) => setCategoryId(event.target.value)}>
-          <option value="">{t('shop.allCategories')}</option>
-          {categories.data?.map((category) => (
-            <option key={category.id} value={category.id}>
-              {categoryLabel(category.name)}
-            </option>
-          ))}
-        </select>
-        <select value={sort} onChange={(event) => setSort(event.target.value)}>
+        <div className="chips grow" role="group" aria-label={t('shop.allCategories')}>
+          <button
+            type="button"
+            className={`chip ${categoryId === '' ? 'active' : ''}`}
+            aria-pressed={categoryId === ''}
+            onClick={() => setCategoryId('')}
+          >
+            {t('shop.allCategories')}
+          </button>
+          {categories.data?.map((category) => {
+            const selected = categoryId === String(category.id);
+            return (
+              <button
+                key={category.id}
+                type="button"
+                className={`chip ${selected ? 'active' : ''}`}
+                aria-pressed={selected}
+                onClick={() => setCategoryId(String(category.id))}
+              >
+                {categoryLabel(category.name)}
+              </button>
+            );
+          })}
+        </div>
+        <select aria-label={t('shop.sortName')} value={sort} onChange={(event) => setSort(event.target.value)}>
           <option value="name">{t('shop.sortName')}</option>
           <option value="price_asc">{t('shop.sortAsc')}</option>
           <option value="price_desc">{t('shop.sortDesc')}</option>

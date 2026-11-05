@@ -6,20 +6,21 @@ import { useI18n } from '../i18n';
 import { useSettings } from '../settings';
 import { LocationInput } from '../components/LocationInput';
 import { Card, Empty, ErrorState, Loading, Notice, PageHeader } from '../ui';
-import type { GpProfile, GpShipment, Point } from '../../shared/types';
+import type { GpProfile, PackageView, Point } from '../../shared/types';
 import { COUNTRIES } from '../../shared/countries';
 import type { TranslationKey } from '../../shared/i18n/en';
 
 const GP_STATUS_KEY: Record<string, TranslationKey> = {
   registered: 'gp.status.registered',
   picked_up: 'gp.status.picked_up',
+  out_for_delivery: 'gp.status.out_for_delivery',
   delivered: 'gp.status.delivered',
 };
 
 export function GpPeoplePage() {
   const { t } = useI18n();
   const { money } = useSettings();
-  const list = useApi(() => api<{ shipments: GpShipment[] }>('/gp/shipments').then((d) => d.shipments));
+  const list = useApi(() => api<{ shipments: PackageView[] }>('/gp/shipments').then((d) => d.shipments));
   return (
     <div className="page">
       <PageHeader title={t('gp.peopleTitle')} subtitle={t('gp.peopleSubtitle')} />
@@ -157,19 +158,23 @@ export function GpDashboardPage() {
   );
 }
 
+const EMPTY_SHIPMENT = {
+  senderName: '',
+  senderPhone: '',
+  receiverName: '',
+  receiverPhone: '',
+  receiverAddress: '',
+  weightKg: '',
+  priceCents: '',
+};
+
 function GpShipments({ initialEditId }: { initialEditId: number | null }) {
   const { t } = useI18n();
   const { money } = useSettings();
   const action = useAction();
-  const list = useApi(() => api<{ shipments: GpShipment[] }>('/gp/shipments').then((d) => d.shipments));
-  const [form, setForm] = useState({
-    senderName: '',
-    senderPhone: '',
-    receiverName: '',
-    receiverPhone: '',
-    weightKg: '',
-    priceCents: '',
-  });
+  const list = useApi(() => api<{ shipments: PackageView[] }>('/gp/shipments').then((d) => d.shipments));
+  const [form, setForm] = useState(EMPTY_SHIPMENT);
+  const [receiverPoint, setReceiverPoint] = useState<Point | null>(null);
   const [photo, setPhoto] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(initialEditId);
@@ -180,12 +185,15 @@ function GpShipments({ initialEditId }: { initialEditId: number | null }) {
   }, [initialEditId, list.data]);
 
   async function create() {
-    if (!form.senderName || !form.receiverName) return;
+    if (!form.senderName || !form.receiverName || !receiverPoint) return;
     const body = {
       senderName: form.senderName,
       senderPhone: form.senderPhone,
       receiverName: form.receiverName,
       receiverPhone: form.receiverPhone,
+      receiverAddress: form.receiverAddress,
+      receiverLat: receiverPoint.lat,
+      receiverLng: receiverPoint.lng,
       photoUrl: photo,
       weightKg: Number(form.weightKg),
       priceCents: Number(form.priceCents),
@@ -196,23 +204,26 @@ function GpShipments({ initialEditId }: { initialEditId: number | null }) {
         : api('/gp/shipments', { method: 'POST', body }),
     );
     if (result !== undefined) {
-      setForm({ senderName: '', senderPhone: '', receiverName: '', receiverPhone: '', weightKg: '', priceCents: '' });
+      setForm(EMPTY_SHIPMENT);
+      setReceiverPoint(null);
       setPhoto(null);
       setEditingId(null);
       list.reload();
     }
   }
 
-  function editShipment(sh: GpShipment) {
+  function editShipment(sh: PackageView) {
     setEditingId(sh.id);
     setForm({
       senderName: sh.senderName,
-      senderPhone: sh.senderPhone,
+      senderPhone: sh.senderPhone ?? '',
       receiverName: sh.receiverName,
-      receiverPhone: sh.receiverPhone,
+      receiverPhone: sh.receiverPhone ?? '',
+      receiverAddress: sh.receiverAddress ?? '',
       weightKg: String(sh.weightKg),
       priceCents: String(sh.priceCents),
     });
+    setReceiverPoint(sh.receiverLat !== null && sh.receiverLng !== null ? { lat: sh.receiverLat, lng: sh.receiverLng } : null);
     setPhoto(sh.photoUrl);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -257,6 +268,14 @@ function GpShipments({ initialEditId }: { initialEditId: number | null }) {
             <label className="field"><span>{t('gp.priceFcfa')}</span><input type="number" value={form.priceCents} onChange={(e) => setForm({ ...form, priceCents: e.target.value })} /></label>
           </div>
           <label className="field">
+            <span>{t('gp.receiverAddress')}</span>
+            <input value={form.receiverAddress} onChange={(e) => setForm({ ...form, receiverAddress: e.target.value })} placeholder={t('gp.dropoffPlaceholder')} />
+          </label>
+          <label className="field">
+            <span>{t('gp.receiverLocation')}</span>
+            <LocationInput value={receiverPoint} onChange={setReceiverPoint} />
+          </label>
+          <label className="field">
             <span>{t('gp.packagePhoto')}</span>
             <input type="file" accept="image/*" onChange={async (e) => {
               const f = e.target.files?.[0];
@@ -269,11 +288,11 @@ function GpShipments({ initialEditId }: { initialEditId: number | null }) {
           </label>
           {action.error && <Notice tone="danger">{action.error}</Notice>}
           <div className="row-gap">
-            <button className="btn primary" disabled={action.busy || uploading} onClick={create}>
+            <button className="btn primary" disabled={action.busy || uploading || !receiverPoint} onClick={create}>
               {editingId ? t('gp.saveChanges') : t('gp.registerPackage')}
             </button>
             {editingId && (
-              <button className="btn" type="button" onClick={() => { setEditingId(null); setForm({ senderName: '', senderPhone: '', receiverName: '', receiverPhone: '', weightKg: '', priceCents: '' }); setPhoto(null); }}>
+              <button className="btn" type="button" onClick={() => { setEditingId(null); setForm(EMPTY_SHIPMENT); setReceiverPoint(null); setPhoto(null); }}>
                 {t('common.cancel')}
               </button>
             )}
@@ -300,21 +319,32 @@ function GpShipments({ initialEditId }: { initialEditId: number | null }) {
                 </tr>
               </thead>
               <tbody>
-                {list.data.map((sh) => (
-                  <tr key={sh.id} style={{ cursor: 'pointer' }} onClick={() => editShipment(sh)}>
-                    <td>{sh.photoUrl ? <img src={sh.photoUrl} alt={t('gp.packageAlt')} style={{ height: 40, borderRadius: 4 }} /> : '—'}</td>
-                    <td>{sh.senderName}<br /><span className="muted small">{sh.senderPhone}</span></td>
-                    <td>{sh.receiverName}<br /><span className="muted small">{sh.receiverPhone}</span></td>
-                    <td>{sh.weightKg} kg</td>
-                    <td>{money(sh.priceCents)}</td>
-                    <td>{t(GP_STATUS_KEY[sh.status] ?? 'gp.status.registered')}{sh.proofPhotoUrl ? <><br /><img src={sh.proofPhotoUrl} alt={t('gp.proofAlt')} style={{ height: 32, borderRadius: 4 }} /></> : null}</td>
-                    <td onClick={(e) => e.stopPropagation()}>
-                      {sh.status === 'registered' && <button className="btn small" disabled={action.busy} onClick={() => mark(sh.id, 'picked_up')}>{t('gp.markPickedUp')}</button>}
-                      {sh.status === 'picked_up' && <button className="btn small primary" disabled={action.busy || uploading} onClick={() => mark(sh.id, 'delivered')}>{t('gp.markDelivered')}</button>}
-                      <button className="btn small danger" disabled={action.busy} onClick={() => remove(sh.id)}>{t('common.remove')}</button>
-                    </td>
-                  </tr>
-                ))}
+                {list.data.map((sh) => {
+                  const editable = sh.status === 'registered' || (sh.status === 'picked_up' && !sh.conductor);
+                  return (
+                    <tr key={sh.id} style={{ cursor: editable ? 'pointer' : 'default' }} onClick={editable ? () => editShipment(sh) : undefined}>
+                      <td>{sh.photoUrl ? <img src={sh.photoUrl} alt={t('gp.packageAlt')} style={{ height: 40, borderRadius: 4 }} /> : '—'}</td>
+                      <td>{sh.senderName}<br /><span className="muted small">{sh.senderPhone}</span></td>
+                      <td>
+                        {sh.receiverName}<br /><span className="muted small">{sh.receiverPhone}</span>
+                        {sh.receiverAddress && <><br /><span className="muted small">{sh.receiverAddress}</span></>}
+                      </td>
+                      <td>{sh.weightKg} kg</td>
+                      <td>{money(sh.priceCents)}</td>
+                      <td>
+                        {t(GP_STATUS_KEY[sh.status] ?? 'gp.status.registered')}
+                        {sh.status === 'picked_up' && !sh.conductor && <><br /><span className="muted small">{t('gp.waitingPartner')}</span></>}
+                        {sh.conductor && sh.status !== 'delivered' && <><br /><span className="muted small">{t('gp.partnerName', { name: sh.conductor.name })}</span></>}
+                        {sh.proofPhotoUrl ? <><br /><img src={sh.proofPhotoUrl} alt={t('gp.proofAlt')} style={{ height: 32, borderRadius: 4 }} /></> : null}
+                      </td>
+                      <td onClick={(e) => e.stopPropagation()}>
+                        {sh.status === 'registered' && <button className="btn small" disabled={action.busy} onClick={() => mark(sh.id, 'picked_up')}>{t('gp.markPickedUp')}</button>}
+                        {sh.status === 'picked_up' && !sh.conductor && <button className="btn small primary" disabled={action.busy || uploading} onClick={() => mark(sh.id, 'delivered')}>{t('gp.markDelivered')}</button>}
+                        {sh.status === 'registered' && <button className="btn small danger" disabled={action.busy} onClick={() => remove(sh.id)}>{t('common.remove')}</button>}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
             <p className="muted small">{t('gp.clickRow')}</p>
@@ -324,4 +354,3 @@ function GpShipments({ initialEditId }: { initialEditId: number | null }) {
     </div>
   );
 }
-

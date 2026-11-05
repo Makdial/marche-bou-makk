@@ -1,7 +1,7 @@
 import { sql, sqlIn } from './db';
 import { HttpError } from './http';
 import { DELIVERY_STATUSES, OPEN_STATUSES } from '../shared/status';
-import type { AdminMap, OrderStatus, PublicGp, PublicStore, UserStatus, VehicleType, VendorMap } from '../shared/types';
+import type { AdminMap, OrderStatus, PublicGp, PublicGpProfile, PublicStore, UserStatus, VehicleType, VendorMap } from '../shared/types';
 
 export function publicGps(): PublicGp[] {
   return sql
@@ -18,6 +18,33 @@ export function publicGps(): PublicGp[] {
       lat: row.dropoff_lat,
       lng: row.dropoff_lng,
     }));
+}
+
+export function publicGpProfile(id: number): PublicGpProfile {
+  const row = sql.get<{
+    id: number;
+    name: string;
+    country: string | null;
+    senegal_phone: string | null;
+    dropoff_address: string | null;
+    dropoff_lat: number;
+    dropoff_lng: number;
+  }>(
+    `SELECT u.id, u.name, g.country, g.senegal_phone, g.dropoff_address, g.dropoff_lat, g.dropoff_lng
+     FROM gp_profiles g JOIN users u ON u.id = g.user_id
+     WHERE u.id = ? AND u.status = 'active' AND g.dropoff_lat IS NOT NULL AND g.dropoff_lng IS NOT NULL`,
+    id,
+  );
+  if (!row) throw new HttpError(404, 'err.gpNotFound');
+  return {
+    id: row.id,
+    name: row.name,
+    country: row.country,
+    address: row.dropoff_address,
+    lat: row.dropoff_lat,
+    lng: row.dropoff_lng,
+    senegalPhone: row.senegal_phone,
+  };
 }
 
 export function publicStores(): PublicStore[] {

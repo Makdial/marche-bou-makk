@@ -2,21 +2,32 @@ import { useEffect, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router';
 import { api } from '../api';
 import { useAuth } from '../auth';
+import { OrderChat } from '../components/OrderChat';
 import { OrderMap } from '../components/MapView';
 import { DetailBlock, MapLink, OrderCard, OrderProgress } from '../components/OrderParts';
 import { renderMessage, useI18n } from '../i18n';
+import { Icon } from '../icons';
 import { useAction, useApi } from '../hooks';
 import { OPEN_STATUSES } from '../../shared/status';
-import { formatDateTime, formatKm, paymentMethodLabel, paymentStatusLabel, statusLabel, vehicleLabel } from '../format';
+import { formatDateTime, formatKm, paymentMethodLabel, paymentStatusLabel, statusLabel, timeAgo, vehicleLabel } from '../format';
 import { useSettings } from '../settings';
-import { Card, Empty, ErrorState, Loading, Notice, PageHeader, StatusBadge } from '../ui';
-import type { OrderView } from '../../shared/types';
+import { Badge, Card, Empty, ErrorState, Loading, Notice, PageHeader, StatusBadge } from '../ui';
+import type { OrderView, PackageStatus, PackageView } from '../../shared/types';
+import type { TranslationKey } from '../../shared/i18n/en';
+
+const PACKAGE_STEPS: { status: PackageStatus; key: TranslationKey }[] = [
+  { status: 'registered', key: 'pkg.step.registered' },
+  { status: 'picked_up', key: 'pkg.step.pickedUp' },
+  { status: 'out_for_delivery', key: 'pkg.step.onTheWay' },
+  { status: 'delivered', key: 'pkg.step.delivered' },
+];
 
 export function MyOrdersPage() {
   const { t } = useI18n();
   const location = useLocation();
   const placed = (location.state as { placed?: number } | null)?.placed;
   const orders = useApi(() => api<{ orders: OrderView[] }>('/orders').then((data) => data.orders));
+  const packages = useApi(() => api<{ packages: PackageView[] }>('/packages').then((data) => data.packages));
   const open = orders.data?.filter((order) => OPEN_STATUSES.includes(order.status)) ?? [];
   const past = orders.data?.filter((order) => !OPEN_STATUSES.includes(order.status)) ?? [];
 
@@ -50,6 +61,17 @@ export function MyOrdersPage() {
           </div>
         </>
       )}
+      {packages.data && packages.data.length > 0 && (
+        <>
+          <h3 className="section-title">{t('pkg.title')}</h3>
+          <p className="muted small">{t('pkg.subtitle')}</p>
+          <div className="stack">
+            {packages.data.map((pkg) => (
+              <PackageCard key={pkg.id} pkg={pkg} />
+            ))}
+          </div>
+        </>
+      )}
       {past.length > 0 && (
         <>
           <h3 className="section-title">{t('orders.past')}</h3>
@@ -61,6 +83,42 @@ export function MyOrdersPage() {
         </>
       )}
     </div>
+  );
+}
+
+function PackageCard({ pkg }: { pkg: PackageView }) {
+  const { t } = useI18n();
+  const { money } = useSettings();
+  const current = PACKAGE_STEPS.findIndex((step) => step.status === pkg.status);
+  return (
+    <Card className="order-row">
+      <div className="order-card-head">
+        <div>
+          <strong>{t('pkg.from', { sender: pkg.senderName, gp: pkg.gp.name })}</strong>
+          <span className="muted"> · {money(pkg.priceCents)}</span>
+        </div>
+        <Badge tone={pkg.status === 'delivered' ? 'success' : 'info'}>{t(PACKAGE_STEPS[current]?.key ?? 'pkg.step.registered')}</Badge>
+      </div>
+      <div className="package-steps">
+        {PACKAGE_STEPS.map((step, index) => (
+          <span key={step.status} className={index <= current ? 'done' : ''}>
+            {t(step.key)}
+          </span>
+        ))}
+      </div>
+      <div className="muted small">
+        {pkg.conductor && pkg.status !== 'delivered' && <div>{t('pkg.assigned', { name: pkg.conductor.name })}</div>}
+        {pkg.status === 'picked_up' && !pkg.conductor && pkg.pickupAddress && (
+          <div>
+            {t('pkg.collectAt', { address: pkg.pickupAddress })} · {t('pkg.waitingPartner')}
+          </div>
+        )}
+        {pkg.status !== 'delivered' && pkg.receiverAddress && <div>{t('pkg.deliverTo', { address: pkg.receiverAddress })}</div>}
+      </div>
+      {pkg.proofPhotoUrl && (
+        <img src={pkg.proofPhotoUrl} alt={t('pkg.proof')} style={{ maxHeight: 120, borderRadius: 8, marginTop: 8 }} />
+      )}
+    </Card>
   );
 }
 
@@ -94,6 +152,45 @@ export function OrderPage() {
           ? '/admin/orders'
           : '/orders';
 
+  const isStoreOwner = user?.role === 'vendor' && user.status === 'active' && user.store?.id === current.store.id;
+  const cashToConfirm = isStoreOwner && current.status === 'delivered' && current.paymentMethod === 'cash' && !current.cashReceivedAt;
+  const vendorPaymentNote: string | null =
+    !isStoreOwner || current.status === 'rejected' || current.status === 'cancelled'
+      ? null
+      : current.paymentMethod === 'mobile_money'
+        ? t('vendor.paidOnlineNote')
+        : current.cashReceivedAt
+          ? t('vendor.cashConfirmedAt', { date: formatDateTime(current.cashReceivedAt) })
+          : current.status === 'delivered'
+            ? null
+            : t('vendor.cashOnDeliveryNote', { amount: money(current.totalCents) });
+
+  // Buyers and stores talk to the driver on the order. The driver talks to the customer and to the store.
+  const chats: { withUserId: number; title: string }[] = [];
+  if (user?.status === 'active') {
+    if ((user.role === 'buyer' || user.role === 'vendor') && current.conductor) {
+      chats.push({ withUserId: current.conductor.id, title: t('order.chatWithDriver') });
+    }
+    if (user.role === 'conductor') {
+      chats.push({ withUserId: current.buyer.id, title: t('order.chatWithCustomer') });
+      chats.push({ withUserId: current.store.ownerId, title: t('order.chatWithStore') });
+    }
+  }
+  const driverSeen = current.conductor?.locationUpdatedAt ?? null;
+  const driverFresh = driverSeen !== null && Date.now() - new Date(driverSeen).getTime() < 90_000;
+
+  async function vendorStep(path: string, body?: unknown) {
+    const result = await action.run(() => api(path, { method: 'POST', body }));
+    if (result !== undefined) order.reload();
+  }
+
+  async function declineOrder() {
+    if (!current) return;
+    const reason = window.prompt(t('vendor.declinePrompt'));
+    if (reason === null) return;
+    await vendorStep(`/vendor/orders/${current.id}/reject`, { reason: reason.trim() || undefined });
+  }
+
   async function cancel() {
     if (!current) return;
     if (!window.confirm(t('order.cancelConfirm'))) return;
@@ -125,6 +222,43 @@ export function OrderPage() {
           <p className="eta">{t('order.eta', { minutes: current.etaMinutes })}</p>
         )}
       </Card>
+
+      {isStoreOwner && (current.status === 'placed' || current.status === 'preparing' || current.status === 'ready' || cashToConfirm) && (
+        <Card title={t('common.actions')}>
+          {current.status === 'ready' && current.arrivedPickupAt && <p className="muted small">{t('vendor.driverArrived')}</p>}
+          <div className="row-actions">
+            {current.status === 'placed' && (
+              <>
+                <button className="btn primary" disabled={action.busy} onClick={() => vendorStep(`/vendor/orders/${current.id}/accept`)}>
+                  {t('vendor.accept')}
+                </button>
+                <button className="btn danger" disabled={action.busy} onClick={declineOrder}>
+                  {t('vendor.decline')}
+                </button>
+              </>
+            )}
+            {current.status === 'preparing' && (
+              <button className="btn primary" disabled={action.busy} onClick={() => vendorStep(`/vendor/orders/${current.id}/ready`)}>
+                {t('vendor.markReady')}
+              </button>
+            )}
+            {current.status === 'ready' && current.conductor && (
+              <button className="btn primary" disabled={action.busy} onClick={() => vendorStep(`/vendor/orders/${current.id}/picked-up`)}>
+                {t('vendor.handedOver')}
+              </button>
+            )}
+            {current.status === 'ready' && !current.conductor && <span className="muted small">{t('vendor.waitingCollect')}</span>}
+            {cashToConfirm && (
+              <>
+                <span className="muted small">{t('vendor.cashToConfirm', { amount: money(current.totalCents) })}</span>
+                <button className="btn primary" disabled={action.busy} onClick={() => vendorStep(`/vendor/orders/${current.id}/cash-received`)}>
+                  {t('vendor.cashReceived')}
+                </button>
+              </>
+            )}
+          </div>
+        </Card>
+      )}
 
       <Card title={t('map.title')}>
         <OrderMap order={current} />
@@ -161,22 +295,35 @@ export function OrderPage() {
                   {vehicleLabel(current.conductor.vehicle)}
                   {current.conductor.phone && ` · ${current.conductor.phone}`}
                 </span>
-                {current.conductor.locationUpdatedAt && (
-                  <span className="muted small">
-                    {t('order.locationShared', { date: formatDateTime(current.conductor.locationUpdatedAt) })}
-                  </span>
+                <span className={`live ${driverFresh ? 'on' : ''}`}>
+                  {driverSeen === null
+                    ? t('order.driverNoPosition')
+                    : driverFresh
+                      ? t('order.driverLive', { ago: timeAgo(driverSeen) })
+                      : t('order.driverStale', { ago: timeAgo(driverSeen) })}
+                </span>
+                {user?.role !== 'conductor' && (
+                  <div className="row-actions">
+                    {current.conductor.phone && (
+                      <a className="btn small" href={`tel:${current.conductor.phone}`}>
+                        <Icon name="phone" size={16} />
+                        {t('order.callDriver')}
+                      </a>
+                    )}
+                    {chats.length > 0 && (
+                      <a className="btn small" href="#order-chat">
+                        <Icon name="chat" size={16} />
+                        {t('order.messageDriver')}
+                      </a>
+                    )}
+                  </div>
                 )}
               </DetailBlock>
             ) : (
               <p className="muted small">{t('order.noConductorYet')}</p>
             )}
             <span className="muted small">{t('order.distance', { km: formatKm(current.distanceKm) })}</span>
-            {user?.role === 'buyer' && current.conductor && (
-              <Link to={`/messages?with=${current.conductor.id}`} className="link">
-                {t('chat.messageConductor')}
-              </Link>
-            )}
-            {(user?.role === 'conductor' || user?.role === 'vendor') && current.buyer && user.id !== current.buyer.id && (
+            {user?.role === 'vendor' && current.buyer && (
               <Link to={`/messages?with=${current.buyer.id}`} className="link">
                 {t('chat.messageCustomer')}
               </Link>
@@ -227,6 +374,7 @@ export function OrderPage() {
               status: paymentStatusLabel(current.paymentStatus),
             })}
           </p>
+          {vendorPaymentNote && <p className="small">{vendorPaymentNote}</p>}
 
           {current.commissionCents !== null && (
             <p className="small">
@@ -250,6 +398,16 @@ export function OrderPage() {
           )}
         </Card>
       </div>
+
+      {chats.length > 0 && (
+        <div id="order-chat" className="stack">
+          {chats.map((chat) => (
+            <Card key={chat.withUserId} title={chat.title}>
+              <OrderChat withUserId={chat.withUserId} />
+            </Card>
+          ))}
+        </div>
+      )}
 
       {current.deliveryPhotoUrl && (
         <Card title={t('order.deliveryProof')}>

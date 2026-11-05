@@ -6,6 +6,7 @@ export type OrderStatus =
   | 'placed'
   | 'preparing'
   | 'ready'
+  | 'picked_up'
   | 'out_for_delivery'
   | 'delivered'
   | 'rejected'
@@ -56,18 +57,32 @@ export interface GpProfile {
   dropoffLng: number | null;
 }
 
-export interface GpShipment {
+export type PackageStatus = 'registered' | 'picked_up' | 'out_for_delivery' | 'delivered';
+
+// An international package. The sender's phone is only shown to its GP, and the receiver's phone to the GP and the conductor.
+export interface PackageView {
   id: number;
+  status: PackageStatus;
+  gp: { id: number; name: string; country: string | null };
   senderName: string;
-  senderPhone: string;
+  senderPhone: string | null;
   receiverName: string;
-  receiverPhone: string;
-  photoUrl: string | null;
+  receiverPhone: string | null;
+  receiverAddress: string | null;
+  receiverLat: number | null;
+  receiverLng: number | null;
+  pickupAddress: string | null;
+  pickupLat: number | null;
+  pickupLng: number | null;
   weightKg: number;
   priceCents: number;
-  status: 'registered' | 'picked_up' | 'delivered';
+  photoUrl: string | null;
   proofPhotoUrl: string | null;
+  conductor: { id: number; name: string; vehicle: VehicleType } | null;
   createdAt: string;
+  assignedAt: string | null;
+  pickedUpAt: string | null;
+  outForDeliveryAt: string | null;
   deliveredAt: string | null;
 }
 
@@ -191,7 +206,7 @@ export interface OrderView {
   totalCents: number;
   distanceKm: number;
   etaMinutes: number | null;
-  store: { id: number; name: string; address: string; lat: number; lng: number; phone: string | null };
+  store: { id: number; ownerId: number; name: string; address: string; lat: number; lng: number; phone: string | null };
   buyer: { id: number; name: string; phone: string | null };
   dropoff: { name: string; phone: string | null; address: string; lat: number; lng: number; notes: string | null } | null;
   conductor: {
@@ -213,12 +228,15 @@ export interface OrderView {
   deliveredAt: string | null;
   arrivedPickupAt: string | null;
   arrivedDropoffAt: string | null;
+  pickedUpAt: string | null;
+  cashReceivedAt: string | null;
   deliveryPhotoUrl: string | null;
 }
 
 export interface ConductorJob {
   id: number;
-  status: OrderStatus;
+  kind: 'order' | 'package';
+  status: OrderStatus | PackageStatus;
   storeName: string;
   pickupAddress: string;
   pickupLat: number;
@@ -237,6 +255,7 @@ export interface ConductorJob {
 export interface ConductorOverview {
   profile: ConductorProfile;
   active: OrderView | null;
+  activePackage: PackageView | null;
   jobs: ConductorJob[];
   jobsNote: string | null;
   stats: {
@@ -330,6 +349,10 @@ export interface PublicGp {
   address: string | null;
   lat: number;
   lng: number;
+}
+
+export interface PublicGpProfile extends PublicGp {
+  senegalPhone: string | null;
 }
 
 export interface PublicStore {
@@ -492,4 +515,5 @@ export interface PublicSettings {
   center: Point;
   baseDeliveryFeeCents: number;
   perKmFeeCents: number;
+  lowStockThreshold: number;
 }

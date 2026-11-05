@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { authenticate, requireActive, requireRole } from '../auth';
 import { createOffer, listVendorOffers, offerCreateSchema, offerPatchSchema, updateOffer } from '../catalog';
 import { idParam } from '../http';
-import { listVendorOrders, vendorAccept, vendorReady, vendorReject } from '../orders';
+import { listVendorOrders, vendorAccept, vendorCashReceived, vendorPickedUp, vendorReady, vendorReject } from '../orders';
 import { requireStore, storeSchema, updateStore } from '../accounts';
 import { getSettings } from '../settings';
 import { vendorStats } from '../stats';
@@ -79,4 +79,12 @@ vendorRouter.post('/orders/:id/reject', requireActive, (req, res) => {
 
 vendorRouter.post('/orders/:id/ready', requireActive, (req, res) => {
   res.json({ order: vendorReady(req.user!, idParam(req.params.id)) });
+});
+
+vendorRouter.post('/orders/:id/picked-up', requireActive, (req, res) => {
+  res.json({ order: vendorPickedUp(req.user!, idParam(req.params.id)) });
+});
+
+vendorRouter.post('/orders/:id/cash-received', requireActive, (req, res) => {
+  res.json({ order: vendorCashReceived(req.user!, idParam(req.params.id)) });
 });

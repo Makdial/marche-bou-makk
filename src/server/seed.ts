@@ -3,7 +3,7 @@ import { config } from './config';
 import { initChatTables } from './chat';
 import { migrate, now, sql } from './db';
 import { setWatch } from './catalog';
-import { checkout, conductorAccept, conductorDeliver, conductorPickup, vendorAccept, vendorReady } from './orders';
+import { checkout, conductorAccept, conductorDeliver, conductorOnTheWay, conductorPickup, vendorAccept, vendorReady } from './orders';
 import { updateLocation } from './conductors';
 import { normalizeProductName } from '../shared/format';
 import type { Point, VehicleType } from '../shared/types';
@@ -331,6 +331,7 @@ function seedDemo(): void {
   const bakeryStore = sql.get<{ lat: number; lng: number }>('SELECT lat, lng FROM stores WHERE id = ?', bakery);
   updateLocation(authUser(aminata).id, { lat: bakeryStore!.lat, lng: bakeryStore!.lng });
   conductorPickup(authUser(aminata), deliveredId);
+  conductorOnTheWay(authUser(aminata), deliveredId);
   updateLocation(authUser(aminata).id, { lat: awaPoint.lat, lng: awaPoint.lng });
   conductorDeliver(authUser(aminata), deliveredId, '/uploads/proof.jpg');
 
@@ -350,6 +351,7 @@ function seedDemo(): void {
   const grocerStore = sql.get<{ lat: number; lng: number }>('SELECT lat, lng FROM stores WHERE id = ?', grocer);
   updateLocation(authUser(ousmane).id, { lat: grocerStore!.lat, lng: grocerStore!.lng });
   conductorPickup(authUser(ousmane), onRoadId);
+  conductorOnTheWay(authUser(ousmane), onRoadId);
 
   // A new order waiting for the store to confirm.
   checkout(authUser(awa), {

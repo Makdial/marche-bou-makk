@@ -46,8 +46,13 @@ function requireProfile(userId: number): ConductorProfile {
 }
 
 export function hasActiveDelivery(userId: number): boolean {
-  return !!sql.get(
+  const order = sql.get(
     `SELECT 1 AS found FROM orders WHERE conductor_id = ? AND status IN (${sqlIn(DELIVERY_STATUSES)}) LIMIT 1`,
+    userId,
+  );
+  if (order) return true;
+  return !!sql.get(
+    "SELECT 1 AS found FROM gp_shipments WHERE conductor_id = ? AND status IN ('picked_up', 'out_for_delivery') LIMIT 1",
     userId,
   );
 }
@@ -76,7 +81,7 @@ export function updateLocation(userId: number, point: Point): void {
   const order = sql.get<{ id: number; buyer_id: number; store_owner_id: number }>(
     `SELECT o.id, o.buyer_id, s.owner_id AS store_owner_id
      FROM orders o JOIN stores s ON s.id = o.store_id
-     WHERE o.conductor_id = ? AND o.status IN ('preparing', 'ready', 'out_for_delivery')`,
+     WHERE o.conductor_id = ? AND o.status IN (${sqlIn(DELIVERY_STATUSES)})`,
     userId,
   );
   if (!order) return;
@@ -96,6 +101,9 @@ export function idleOnlineConductors(): IdleConductor[] {
      WHERE c.is_online = 1 AND u.status = 'active' AND c.lat IS NOT NULL AND c.lng IS NOT NULL
        AND NOT EXISTS (
          SELECT 1 FROM orders o WHERE o.conductor_id = c.user_id AND o.status IN (${sqlIn(DELIVERY_STATUSES)})
+       )
+       AND NOT EXISTS (
+         SELECT 1 FROM gp_shipments p WHERE p.conductor_id = c.user_id AND p.status IN ('picked_up', 'out_for_delivery')
        )`,
   );
 }
@@ -145,6 +153,7 @@ export function jobBoard(profile: ConductorProfile): { jobs: ConductorJob[]; not
       const toPickup = origin ? roundKm(distanceKm(origin, { lat: row.store_lat, lng: row.store_lng })) : null;
       return {
         id: row.id,
+        kind: 'order',
         status: row.status,
         storeName: row.store_name,
         pickupAddress: row.store_address,
@@ -182,9 +191,15 @@ export function conductorStats(userId: number) {
     userId,
     today,
   );
+  const packages = sql.get<{ n: number; today: number }>(
+    `SELECT COUNT(*) AS n, COALESCE(SUM(CASE WHEN substr(delivered_at, 1, 10) = ? THEN 1 ELSE 0 END), 0) AS today
+     FROM gp_shipments WHERE conductor_id = ? AND status = 'delivered'`,
+    today,
+    userId,
+  );
   return {
-    deliveriesTotal: totals?.n ?? 0,
-    deliveredToday: todays?.n ?? 0,
+    deliveriesTotal: (totals?.n ?? 0) + (packages?.n ?? 0),
+    deliveredToday: (todays?.n ?? 0) + (packages?.today ?? 0),
     earningsTotalCents: totals?.earned ?? 0,
     earningsTodayCents: todays?.earned ?? 0,
   };

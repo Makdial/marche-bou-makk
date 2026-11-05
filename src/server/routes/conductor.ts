@@ -10,9 +10,11 @@ import {
   conductorArriveDropoff,
   conductorArrivePickup,
   conductorDeliver,
+  conductorOnTheWay,
   conductorPickup,
   listConductorHistory,
 } from '../orders';
+import { acceptPackage, activePackageFor, deliverPackage, packageJobs, pickupPackage } from '../packages';
 
 export const conductorRouter = Router();
 
@@ -22,10 +24,12 @@ conductorRouter.get('/overview', (req, res) => {
   const profile = getConductorProfile(req.user!.id);
   if (!profile) throw new HttpError(404, 'err.conductorProfile');
   const board = jobBoard(profile);
+  const jobs = [...board.jobs, ...packageJobs(profile)].sort((a, b) => (a.distanceToPickupKm ?? 0) - (b.distanceToPickupKm ?? 0));
   res.json({
     profile,
     active: activeDeliveryFor(req.user!),
-    jobs: board.jobs,
+    activePackage: activePackageFor(req.user!),
+    jobs,
     jobsNote: board.note ? translate(req.locale, board.note) : null,
     stats: conductorStats(req.user!.id),
   });
@@ -62,6 +66,10 @@ conductorRouter.post('/orders/:id/pickup', requireActive, (req, res) => {
   res.json({ order: conductorPickup(req.user!, idParam(req.params.id)) });
 });
 
+conductorRouter.post('/orders/:id/on-the-way', requireActive, (req, res) => {
+  res.json({ order: conductorOnTheWay(req.user!, idParam(req.params.id)) });
+});
+
 conductorRouter.post('/orders/:id/arrive-dropoff', requireActive, (req, res) => {
   res.json({ order: conductorArriveDropoff(req.user!, idParam(req.params.id)) });
 });
@@ -69,6 +77,19 @@ conductorRouter.post('/orders/:id/arrive-dropoff', requireActive, (req, res) => 
 conductorRouter.post('/orders/:id/deliver', requireActive, (req, res) => {
   const body = z.object({ photoUrl: z.string().trim().max(500).optional() }).parse(req.body ?? {});
   res.json({ order: conductorDeliver(req.user!, idParam(req.params.id), body.photoUrl) });
+});
+
+conductorRouter.post('/packages/:id/accept', requireActive, (req, res) => {
+  res.json({ package: acceptPackage(req.user!, idParam(req.params.id)) });
+});
+
+conductorRouter.post('/packages/:id/pickup', requireActive, (req, res) => {
+  res.json({ package: pickupPackage(req.user!, idParam(req.params.id)) });
+});
+
+conductorRouter.post('/packages/:id/deliver', requireActive, (req, res) => {
+  const body = z.object({ photoUrl: z.string().trim().max(500).optional() }).parse(req.body ?? {});
+  res.json({ package: deliverPackage(req.user!, idParam(req.params.id), body.photoUrl) });
 });
 
 conductorRouter.get('/history', (req, res) => {

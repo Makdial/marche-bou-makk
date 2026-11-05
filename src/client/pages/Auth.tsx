@@ -7,8 +7,13 @@ import { roleLabel } from '../format';
 import { useAction } from '../hooks';
 import { useI18n } from '../i18n';
 import { Badge, Card, Field, Notice } from '../ui';
+import { BrandMark } from '../brand';
+import { Icon } from '../icons';
 import type { Point, Role } from '../../shared/types';
+import type { TranslationKey } from '../../shared/i18n/en';
 import { COUNTRIES } from '../../shared/countries';
+
+const HERO_POINTS: TranslationKey[] = ['auth.heroPoint1', 'auth.heroPoint2', 'auth.heroPoint3'];
 
 const DEMO_ACCOUNTS: { role: Role; email: string; password: string }[] = [
   { role: 'buyer', email: 'buyer@market.local', password: 'demo1234' },
@@ -22,12 +27,36 @@ function AuthShell({ children, title, subtitle }: { children: ReactNode; title: 
   const { t } = useI18n();
   return (
     <div className="auth-page">
+      <aside className="auth-hero">
+        <Link to="/" className="brand big">
+          <span className="logo">
+            <BrandMark size={46} />
+          </span>
+          <span>{t('app.name')}</span>
+        </Link>
+        <div className="stack">
+          <h2>{t('auth.heroTitle')}</h2>
+          <p>{t('auth.heroSubtitle')}</p>
+        </div>
+        <ul className="auth-points">
+          {HERO_POINTS.map((key) => (
+            <li key={key}>
+              <span className="auth-point-icon">
+                <Icon name="check" size={18} />
+              </span>
+              <span>{t(key)}</span>
+            </li>
+          ))}
+        </ul>
+      </aside>
       <div className="auth-column">
         <div className="auth-top">
-          <div className="brand big">
-            <span className="logo">MB</span>
+          <Link to="/" className="brand">
+            <span className="logo">
+              <BrandMark size={36} />
+            </span>
             <span>{t('app.name')}</span>
-          </div>
+          </Link>
           <div className="auth-prefs">
             <Preferences />
           </div>

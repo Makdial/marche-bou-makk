@@ -1,10 +1,9 @@
 import { Router } from 'express';
 import { authenticate, requireActive, requireRole } from '../auth';
 import { getGpProfile, gpProfileSchema, updateGpProfile } from '../accounts';
-import { HttpError } from '../http';
 import { idParam } from '../http';
 import { z } from 'zod';
-import { createShipment, deleteShipment, listShipments, shipmentSchema, updateShipment, updateShipmentStatus } from '../gp_shipments';
+import { createShipment, deleteShipment, listShipments, markHandedOver, markPickedUp, shipmentSchema, updateShipment } from '../gp_shipments';
 
 export const gpRouter = Router();
 
@@ -29,7 +28,9 @@ gpRouter.post('/shipments', requireActive, (req, res) => {
 
 gpRouter.patch('/shipments/:id', requireActive, (req, res) => {
   const body = z.object({ status: z.enum(['picked_up', 'delivered']), proofPhotoUrl: z.string().trim().max(500).optional() }).parse(req.body ?? {});
-  const shipment = updateShipmentStatus(req.user!.id, idParam(req.params.id), body.status, body.proofPhotoUrl);
+  const id = idParam(req.params.id);
+  const shipment =
+    body.status === 'picked_up' ? markPickedUp(req.user!.id, id) : markHandedOver(req.user!.id, id, body.proofPhotoUrl);
   res.json({ shipment });
 });
 

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { useAuth } from '../auth';
+import { announceDriverStatus, onLocationSent, readSharing, writeSharing } from '../components/DriverTracker';
 import { LocationInput } from '../components/LocationInput';
 import { ConductorMap } from '../components/MapView';
 import { DetailBlock, MapLink } from '../components/OrderParts';
@@ -8,10 +9,18 @@ import { formatDateTime, formatKm, timeAgo, vehicleLabel } from '../format';
 import { distanceKm } from '../../shared/geo';
 import { uploadImage } from '../api';
 import { useAction, useApi } from '../hooks';
-import { renderMessage, tr, useI18n } from '../i18n';
+import { renderMessage, useI18n } from '../i18n';
 import { useSettings } from '../settings';
-import { Card, Empty, ErrorState, Loading, Notice, PageHeader, StatCard, StatusBadge } from '../ui';
-import type { ConductorJob, ConductorOverview, OrderView, Point } from '../../shared/types';
+import { Badge, Card, Empty, ErrorState, Loading, Notice, PageHeader, StatCard, StatusBadge } from '../ui';
+import type { ConductorJob, ConductorOverview, OrderView, PackageView, Point } from '../../shared/types';
+import type { TranslationKey } from '../../shared/i18n/en';
+
+const PACKAGE_STEP_KEY: Record<string, TranslationKey> = {
+  registered: 'pkg.step.registered',
+  picked_up: 'pkg.step.pickedUp',
+  out_for_delivery: 'pkg.step.onTheWay',
+  delivered: 'pkg.step.delivered',
+};
 
 export function ConductorHomePage() {
   const { t } = useI18n();
@@ -20,8 +29,7 @@ export function ConductorHomePage() {
   const action = useAction();
   const [tick, setTick] = useState(0);
   const overview = useApi(() => api<ConductorOverview>('/conductor/overview'), [tick]);
-  const [sharing, setSharing] = useState(true);
-  const [geoError, setGeoError] = useState<string | null>(null);
+  const [sharing, setSharing] = useState(readSharing);
   const [lastSent, setLastSent] = useState<string | null>(null);
   const [manual, setManual] = useState<Point | null>(null);
   const [address, setAddress] = useState<string>('');
@@ -38,24 +46,14 @@ export function ConductorHomePage() {
     return () => window.clearInterval(timer);
   }, []);
 
-  useEffect(() => {
-    if (!online || !sharing || !navigator.geolocation) return;
-    const watchId = navigator.geolocation.watchPosition(
-      (position) => {
-        const point = { lat: position.coords.latitude, lng: position.coords.longitude };
-        api('/conductor/location', { body: point })
-          .then(() => setLastSent(new Date().toISOString()))
-          .catch(() => undefined);
-      },
-      () => setGeoError(tr('conductor.locationDenied')),
-      { enableHighAccuracy: true, maximumAge: 15000 },
-    );
-    return () => navigator.geolocation.clearWatch(watchId);
-  }, [online, sharing]);
+  useEffect(() => onLocationSent(setLastSent), []);
 
   async function setStatus(next: boolean) {
     const result = await action.run(() => api('/conductor/status', { method: 'PUT', body: { isOnline: next } }));
-    if (result !== undefined) overview.reload();
+    if (result !== undefined) {
+      overview.reload();
+      announceDriverStatus();
+    }
   }
 
   async function saveLocation() {
@@ -67,8 +65,9 @@ export function ConductorHomePage() {
     }
   }
 
-  async function accept(orderId: number) {
-    const result = await action.run(() => api(`/conductor/jobs/${orderId}/accept`, { method: 'POST' }));
+  async function accept(job: ConductorJob) {
+    const path = job.kind === 'package' ? `/conductor/packages/${job.id}/accept` : `/conductor/jobs/${job.id}/accept`;
+    const result = await action.run(() => api(path, { method: 'POST' }));
     if (result !== undefined) overview.reload();
   }
 
@@ -104,7 +103,7 @@ export function ConductorHomePage() {
             actions={
               <button
                 className={online ? 'btn' : 'btn primary'}
-                disabled={(!approved && !online) || action.busy || (online && !!data.active)}
+                disabled={(!approved && !online) || action.busy || (online && (!!data.active || !!data.activePackage))}
                 onClick={() => setStatus(!online)}
               >
                 {online ? t('conductor.goOffline') : t('conductor.goOnline')}
@@ -113,7 +112,14 @@ export function ConductorHomePage() {
           >
             <div className="row-gap wrap">
               <label className="checkbox">
-                <input type="checkbox" checked={sharing} onChange={(event) => setSharing(event.target.checked)} />
+                <input
+                  type="checkbox"
+                  checked={sharing}
+                  onChange={(event) => {
+                    setSharing(event.target.checked);
+                    writeSharing(event.target.checked);
+                  }}
+                />
                 {t('conductor.shareLocation')}
               </label>
               {lastSent && <span className="muted small">{t('conductor.lastSent', { ago: timeAgo(lastSent) })}</span>}
@@ -121,7 +127,6 @@ export function ConductorHomePage() {
                 <span className="muted small">{t('conductor.lastPosition', { date: formatDateTime(data.profile.locationUpdatedAt) })}</span>
               )}
             </div>
-            {geoError && <Notice tone="warn">{geoError}</Notice>}
             <details className="manual-location" open>
               <summary>{t('conductor.manualLocation')}</summary>
               <div className="stack">
@@ -183,21 +188,23 @@ export function ConductorHomePage() {
 
           {data.active ? (
             <ActiveDelivery order={data.active} onChanged={overview.reload} />
+          ) : data.activePackage ? (
+            <ActivePackage pkg={data.activePackage} own={own} onChanged={overview.reload} />
           ) : (
             <Empty title={t('conductor.noActive')}>{t('conductor.noActiveHint')}</Empty>
           )}
 
           <h3 className="section-title">{t('conductor.jobsNear')}</h3>
           {data.jobsNote && <Notice tone="info">{renderMessage(data.jobsNote, undefined, data.jobsNote)}</Notice>}
-          {online && !data.active && data.jobs.length === 0 && (
+          {online && !data.active && !data.activePackage && data.jobs.length === 0 && (
             <Empty title={t('conductor.noJobs')}>{t('conductor.noJobsHint')}</Empty>
           )}
           <div className="grid-cards jobs">
             {data.jobs.map((job) => (
               <JobCard
-                key={job.id}
+                key={`${job.kind}-${job.id}`}
                 job={job}
-                disabled={!approved || action.busy || !!data.active || !online}
+                disabled={!approved || action.busy || !!data.active || !!data.activePackage || !online}
                 onAccept={accept}
               />
             ))}
@@ -287,6 +294,14 @@ function ActiveDelivery({ order, onChanged }: { order: OrderView; onChanged: () 
             </button>
           </>
         )}
+        {order.status === 'picked_up' && (
+          <>
+            <span className="muted small">{t('conductor.pickedUpNote')}</span>
+            <button className="btn primary" disabled={action.busy} onClick={() => step(`/conductor/orders/${order.id}/on-the-way`)}>
+              {t('conductor.startTrip')}
+            </button>
+          </>
+        )}
         {order.status === 'out_for_delivery' && (
           <>
             {!order.arrivedDropoffAt && (
@@ -313,29 +328,106 @@ function ActiveDelivery({ order, onChanged }: { order: OrderView; onChanged: () 
   );
 }
 
-function JobCard({ job, disabled, onAccept }: { job: ConductorJob; disabled: boolean; onAccept: (id: number) => void }) {
+function ActivePackage({ pkg, own, onChanged }: { pkg: PackageView; own: Point | null; onChanged: () => void }) {
+  const { t } = useI18n();
+  const action = useAction();
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const nearPickup =
+    own !== null && pkg.pickupLat !== null && pkg.pickupLng !== null && distanceKm(own, { lat: pkg.pickupLat, lng: pkg.pickupLng }) <= 0.2;
+  const nearReceiver =
+    own !== null && pkg.receiverLat !== null && pkg.receiverLng !== null && distanceKm(own, { lat: pkg.receiverLat, lng: pkg.receiverLng }) <= 0.2;
+
+  async function step(path: string, body?: unknown) {
+    const result = await action.run(() => api(path, { method: 'POST', body }));
+    if (result !== undefined) onChanged();
+  }
+
+  async function onPhoto(file: File) {
+    setUploading(true);
+    try { setPhotoUrl(await uploadImage(file)); } catch { /* ignore */ }
+    finally { setUploading(false); }
+  }
+
+  return (
+    <Card title={t('conductor.activePackageTitle', { id: pkg.id })} actions={<Badge tone="info">{t(PACKAGE_STEP_KEY[pkg.status] ?? 'pkg.step.registered')}</Badge>}>
+      <div className="two-col tight">
+        <DetailBlock title={t('conductor.step1')}>
+          <strong>{pkg.gp.name}</strong>
+          <span className="muted">{pkg.pickupAddress}</span>
+          {pkg.pickupLat !== null && pkg.pickupLng !== null && <MapLink lat={pkg.pickupLat} lng={pkg.pickupLng} />}
+        </DetailBlock>
+        <DetailBlock title={t('conductor.step2')}>
+          <strong>{pkg.receiverName}</strong>
+          <span className="muted">{pkg.receiverAddress}</span>
+          {pkg.receiverPhone && (
+            <a className="link" href={`tel:${pkg.receiverPhone}`}>
+              {pkg.receiverPhone}
+            </a>
+          )}
+          {pkg.receiverLat !== null && pkg.receiverLng !== null && <MapLink lat={pkg.receiverLat} lng={pkg.receiverLng} />}
+        </DetailBlock>
+      </div>
+      <div className="summary-row">
+        <span>{t('conductor.packageWeight')}</span>
+        <span>{pkg.weightKg} kg</span>
+      </div>
+      {action.error && <ErrorState message={action.error} />}
+      <div className="row-actions end">
+        {pkg.status === 'picked_up' && (
+          <>
+            {!nearPickup && <span className="muted small">{t('conductor.movePackagePickup')}</span>}
+            <button className="btn primary" disabled={action.busy || !nearPickup} onClick={() => step(`/conductor/packages/${pkg.id}/pickup`)}>
+              {t('conductor.confirmPickup')}
+            </button>
+          </>
+        )}
+        {pkg.status === 'out_for_delivery' && (
+          <>
+            <div className="row-gap">
+              <input type="file" accept="image/*" disabled={uploading} onChange={(e) => { const f = e.target.files?.[0]; if (f) onPhoto(f); e.target.value = ''; }} />
+              {photoUrl && <img src={photoUrl} alt={t('conductor.proof')} style={{ height: 48, borderRadius: 6 }} />}
+            </div>
+            {!nearReceiver && <span className="muted small">{t('conductor.moveToDropoffDeliver')}</span>}
+            <button className="btn primary" disabled={action.busy || !nearReceiver || !photoUrl || uploading} onClick={() => step(`/conductor/packages/${pkg.id}/deliver`, { photoUrl })}>
+              {t('conductor.confirmDelivered')}
+            </button>
+          </>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+function JobCard({ job, disabled, onAccept }: { job: ConductorJob; disabled: boolean; onAccept: (job: ConductorJob) => void }) {
   const { t } = useI18n();
   const { money } = useSettings();
+  const isPackage = job.kind === 'package';
   return (
     <Card className="job-card">
       <div className="job-head">
         <div>
           <strong>{job.storeName}</strong>
+          {isPackage && <div className="muted small">{t('conductor.packageJob')}</div>}
           <div className="muted small">{job.pickupAddress}</div>
         </div>
-        <div className="job-earn">{money(job.earningCents)}</div>
+        {!isPackage && <div className="job-earn">{money(job.earningCents)}</div>}
       </div>
       <div className="muted small">
-        {t('conductor.toPickup', { km: formatKm(job.distanceToPickupKm) })} · {t('conductor.trip', { km: formatKm(job.tripKm) })} ·{' '}
-        {t('conductor.jobItems', { count: job.itemCount })} · {t('conductor.aboutMinutes', { minutes: job.etaMinutes })}
+        {t('conductor.toPickup', { km: formatKm(job.distanceToPickupKm) })} · {t('conductor.trip', { km: formatKm(job.tripKm) })}
+        {!isPackage && (
+          <>
+            {' '}· {t('conductor.jobItems', { count: job.itemCount })} · {t('conductor.aboutMinutes', { minutes: job.etaMinutes })}
+          </>
+        )}
       </div>
       <div className="muted small">{t('conductor.dropoffLine', { address: job.dropoffAddress })}</div>
       <div className="row-actions end">
         <span className="muted small">
-          {job.status === 'ready' ? t('conductor.readyNow') : t('conductor.beingPrepared')} ·{' '}
+          {isPackage ? t('conductor.packageReady') : job.status === 'ready' ? t('conductor.readyNow') : t('conductor.beingPrepared')} ·{' '}
           {t('conductor.posted', { ago: timeAgo(job.createdAt) })}
         </span>
-        <button className="btn primary" disabled={disabled} onClick={() => onAccept(job.id)}>
+        <button className="btn primary" disabled={disabled} onClick={() => onAccept(job)}>
           {t('conductor.acceptJob')}
         </button>
       </div>

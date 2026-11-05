@@ -1,5 +1,5 @@
 import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react';
-import { Link } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { api, uploadImage } from '../api';
 import { useAuth } from '../auth';
 import { LocationInput } from '../components/LocationInput';
@@ -36,20 +36,27 @@ export function VendorOverviewPage() {
       {stats.error && <ErrorState message={stats.error} />}
       {stats.data && (
         <div className="stats">
-          <StatCard label={t('vendor.stat.ordersToday')} value={stats.data.ordersToday} />
-          <StatCard label={t('vendor.stat.open')} value={stats.data.openOrders} tone={stats.data.openOrders > 0 ? 'info' : 'neutral'} />
-          <StatCard label={t('vendor.stat.delivered')} value={stats.data.deliveredTotal} tone="success" />
-          <StatCard label={t('vendor.stat.revenue')} value={money(stats.data.revenueCents)} tone="success" />
-          <StatCard label={t('vendor.stat.products')} value={stats.data.productCount} />
+          <StatCard label={t('vendor.stat.ordersToday')} value={stats.data.ordersToday} to="/vendor/orders?scope=all&period=today" />
+          <StatCard
+            label={t('vendor.stat.open')}
+            value={stats.data.openOrders}
+            tone={stats.data.openOrders > 0 ? 'info' : 'neutral'}
+            to="/vendor/orders?scope=open"
+          />
+          <StatCard label={t('vendor.stat.delivered')} value={stats.data.deliveredTotal} tone="success" to="/vendor/orders?scope=done" />
+          <StatCard label={t('vendor.stat.revenue')} value={money(stats.data.revenueCents)} tone="success" to="/vendor/orders?scope=done" />
+          <StatCard label={t('vendor.stat.products')} value={stats.data.productCount} to="/vendor/products" />
           <StatCard
             label={t('vendor.stat.lowStock')}
             value={stats.data.lowStockCount}
             tone={stats.data.lowStockCount > 0 ? 'warn' : 'neutral'}
+            to="/vendor/products?filter=low"
           />
           <StatCard
             label={t('vendor.stat.soldOut')}
             value={stats.data.soldOutCount}
             tone={stats.data.soldOutCount > 0 ? 'danger' : 'neutral'}
+            to="/vendor/products?filter=soldout"
           />
         </div>
       )}
@@ -65,6 +72,11 @@ export function VendorOverviewPage() {
   );
 }
 
+// Reads a URL option such as ?scope=done, falling back to a default when it is missing or unknown.
+function pick<T extends string>(value: string | null, options: readonly T[], fallback: T): T {
+  return options.includes(value as T) ? (value as T) : fallback;
+}
+
 type Scope = 'open' | 'done' | 'all';
 const SCOPE_TABS: { value: Scope; label: TranslationKey }[] = [
   { value: 'open', label: 'vendor.tabIncoming' },
@@ -77,8 +89,11 @@ export function VendorOrdersPage() {
   const { t } = useI18n();
   const { money } = useSettings();
   const action = useAction();
-  const [scope, setScope] = useState<Scope>('open');
-  const [period, setPeriod] = useState<'all' | 'today' | 'week' | 'month'>('all');
+  const [params] = useSearchParams();
+  const [scope, setScope] = useState<Scope>(pick(params.get('scope'), ['open', 'done', 'all'] as const, 'open'));
+  const [period, setPeriod] = useState<'all' | 'today' | 'week' | 'month'>(
+    pick(params.get('period'), ['all', 'today', 'week', 'month'] as const, 'all'),
+  );
   const [tick, setTick] = useState(0);
   const orders = useApi(() => api<{ orders: OrderView[] }>(`/vendor/orders?scope=${scope}`).then((data) => data.orders), [scope, tick]);
   const filteredOrders = (orders.data ?? []).filter((order) => {
@@ -86,7 +101,7 @@ export function VendorOrdersPage() {
     const created = new Date(order.createdAt).getTime();
     const now = Date.now();
     const day = 24 * 60 * 60 * 1000;
-    if (period === 'today') return now - created < day;
+    if (period === 'today') return order.createdAt.slice(0, 10) === new Date().toISOString().slice(0, 10);
     if (period === 'week') return now - created < 7 * day;
     if (period === 'month') return now - created < 30 * day;
     return true;
@@ -178,8 +193,24 @@ export function VendorOrdersPage() {
                     {t('vendor.markReady')}
                   </button>
                 )}
-                {order.status === 'ready' && <span className="muted small">{t('vendor.waitingCollect')}</span>}
+                {order.status === 'ready' && order.conductor && approved && (
+                  <button className="btn primary" disabled={action.busy} onClick={() => act(`/vendor/orders/${order.id}/picked-up`)}>
+                    {t('vendor.handedOver')}
+                  </button>
+                )}
+                {order.status === 'ready' && !order.conductor && <span className="muted small">{t('vendor.waitingCollect')}</span>}
+                {order.status === 'picked_up' && <span className="muted small">{t('vendor.driverHasOrder')}</span>}
                 {order.status === 'out_for_delivery' && <span className="muted small">{t('vendor.onTheWay')}</span>}
+                {order.status === 'delivered' && order.paymentMethod === 'cash' && !order.cashReceivedAt && approved && (
+                  <button className="btn primary" disabled={action.busy} onClick={() => act(`/vendor/orders/${order.id}/cash-received`)}>
+                    {t('vendor.cashReceived')}
+                  </button>
+                )}
+                {order.conductor && (
+                  <Link className="link" to={`/messages?with=${order.conductor.id}`}>
+                    {t('chat.messageConductor')}
+                  </Link>
+                )}
                 <Link className="link" to={`/orders/${order.id}`}>
                   {t('common.details')}
                 </Link>
@@ -192,12 +223,28 @@ export function VendorOrdersPage() {
   );
 }
 
+type ProductFilter = 'all' | 'low' | 'soldout';
+const PRODUCT_FILTER_TABS: { value: ProductFilter; label: TranslationKey }[] = [
+  { value: 'all', label: 'vendor.tabAll' },
+  { value: 'low', label: 'vendor.stat.lowStock' },
+  { value: 'soldout', label: 'vendor.stat.soldOut' },
+];
+
 export function VendorProductsPage() {
   const { user } = useAuth();
   const { t } = useI18n();
   const approved = user?.status === 'active';
   const offers = useApi(() => api<{ offers: VendorOffer[] }>('/vendor/offers').then((data) => data.offers));
   const plan = useApi(() => api<{ plan: any }>('/vendor/plan').then((data) => data.plan));
+  const { settings } = useSettings();
+  const [params] = useSearchParams();
+  const [filter, setFilter] = useState<ProductFilter>(pick(params.get('filter'), ['all', 'low', 'soldout'] as const, 'all'));
+  const lowStockThreshold = settings?.lowStockThreshold ?? 0;
+  const listed = (offers.data ?? []).filter((offer) => {
+    if (filter === 'soldout') return offer.isActive && offer.stock === 0;
+    if (filter === 'low') return offer.isActive && offer.stock > 0 && offer.stock <= lowStockThreshold;
+    return true;
+  });
   const categories = useApi(() => api<{ categories: Category[] }>('/categories').then((data) => data.categories));
 
   return (
@@ -217,11 +264,21 @@ export function VendorProductsPage() {
       ) : (
         <Notice tone="warn">{t('vendor.canPublish')}</Notice>
       )}
-      <Card title={`${t('vendor.listings')} (${offers.data?.length ?? 0})`}>
+      <div className="tabs">
+        {PRODUCT_FILTER_TABS.map((tab) => (
+          <button key={tab.value} className={filter === tab.value ? 'tab active' : 'tab'} onClick={() => setFilter(tab.value)}>
+            {t(tab.label)}
+          </button>
+        ))}
+      </div>
+      <Card title={`${t('vendor.listings')} (${listed.length})`}>
         {offers.loading && !offers.data && <Loading />}
         {offers.error && <ErrorState message={offers.error} />}
         {offers.data?.length === 0 && <Empty title={t('vendor.noProducts')}>{t('vendor.noProductsHint')}</Empty>}
-        {offers.data && offers.data.length > 0 && (
+        {offers.data && offers.data.length > 0 && listed.length === 0 && (
+          <Empty title={t('vendor.nothingHere')}>{t('vendor.nothingHereHint')}</Empty>
+        )}
+        {listed.length > 0 && (
           <table className="table">
             <thead>
               <tr>
@@ -233,7 +290,7 @@ export function VendorProductsPage() {
               </tr>
             </thead>
             <tbody>
-              {offers.data.map((offer) => (
+              {listed.map((offer) => (
                 <OfferRow key={offer.offerId} offer={offer} canEdit={approved} onSaved={offers.reload} />
               ))}
             </tbody>

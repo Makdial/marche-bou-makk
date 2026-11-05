@@ -7,7 +7,7 @@ import { config } from '../config';
 import { getProductDetail, listCategories, listProducts, productQuerySchema, setWatch } from '../catalog';
 import { HttpError, idParam } from '../http';
 import { getPublicSettings } from '../settings';
-import { publicGps, publicStores } from '../maps';
+import { publicGpProfile, publicGps, publicStores } from '../maps';
 import { getStoreProfile } from '../catalog';
 
 export const publicRouter = Router();
@@ -38,6 +38,10 @@ publicRouter.get('/map/gp', (_req, res) => {
   res.json({ gps: publicGps() });
 });
 
+publicRouter.get('/gps/:id', authenticate, (req, res) => {
+  res.json({ gp: publicGpProfile(idParam(req.params.id)) });
+});
+
 publicRouter.get('/stores/:id', (req, res) => {
   res.json({ store: getStoreProfile(idParam(req.params.id)) });
 });
@@ -65,7 +69,7 @@ publicRouter.delete('/products/:id/watch', authenticate, requireRole('buyer'), (
 publicRouter.post(
   '/uploads',
   authenticate,
-  requireRole('vendor', 'admin'),
+  requireRole('vendor', 'admin', 'conductor', 'gp'),
   express.raw({ type: ['image/*', 'video/*'], limit: '25mb' }),
   (req, res) => {
     const body: unknown = req.body;

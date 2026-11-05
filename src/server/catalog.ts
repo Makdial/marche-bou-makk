@@ -484,7 +484,7 @@ export function setWatch(userId: number, productId: number, watching: boolean): 
 }
 export function deleteOffer(store: StoreRef, offerId: number): void {
   const row = sql.get<{ id: number; order_count: number }>(
-    "SELECT o.id, (SELECT COUNT(*) FROM order_items oi JOIN orders ord ON ord.id = oi.order_id WHERE oi.offer_id = o.id AND ord.status IN ('placed','preparing','ready','out_for_delivery')) AS order_count FROM offers o WHERE o.id = ? AND o.store_id = ?",
+    "SELECT o.id, (SELECT COUNT(*) FROM order_items oi JOIN orders ord ON ord.id = oi.order_id WHERE oi.offer_id = o.id AND ord.status IN ('placed','preparing','ready','picked_up','out_for_delivery')) AS order_count FROM offers o WHERE o.id = ? AND o.store_id = ?",
     offerId,
     store.id,
   );

@@ -1,4 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react';
+import { Link } from 'react-router';
 import type { OrderStatus } from '../shared/types';
 import { statusLabel, statusTone, type Tone } from './format';
 import { useI18n } from './i18n';
@@ -47,14 +48,28 @@ export function PageHeader({
   );
 }
 
-export function StatCard({ label, value, hint, tone = 'neutral' }: { label: string; value: ReactNode; hint?: ReactNode; tone?: Tone }) {
-  return (
-    <div className={`stat ${tone}`}>
+export function StatCard({
+  label,
+  value,
+  hint,
+  tone = 'neutral',
+  to,
+}: {
+  label: string;
+  value: ReactNode;
+  hint?: ReactNode;
+  tone?: Tone;
+  to?: string;
+}) {
+  const content = (
+    <>
       <span className="stat-label">{label}</span>
       <strong className="stat-value">{value}</strong>
       {hint && <span className="stat-hint">{hint}</span>}
-    </div>
+    </>
   );
+  if (to) return <Link to={to} className={`stat ${tone} stat-link`}>{content}</Link>;
+  return <div className={`stat ${tone}`}>{content}</div>;
 }
 
 export function Badge({ tone = 'neutral', children }: { tone?: Tone; children: ReactNode }) {
